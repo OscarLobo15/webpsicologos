@@ -1,9 +1,7 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-
-
-
-// Mocks para pruebas (psicólogos)
+// Demo de psicólogos
 const psicologosDemo = [
   {
     id: 1,
@@ -11,7 +9,7 @@ const psicologosDemo = [
     apellido: "García",
     edad: 35,
     ciudad: "Santiago",
-    foto: "", // No hay foto real, se usará círculo
+    foto: "",
   },
   {
     id: 2,
@@ -41,22 +39,12 @@ const psicologosDemo = [
 
 const usuarioMock = {
   nombre: "Usuario",
-  foto: "", // "" para que salga solo el círculo gris
+  foto: "",
 };
 
 export default function Search() {
-  // Para los tooltips de Bootstrap
-  React.useEffect(() => {
-    // Bootstrap 5 Tooltip init
-    // eslint-disable-next-line
-    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    // eslint-disable-next-line
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-      return new window.bootstrap.Tooltip(tooltipTriggerEl);
-    });
-  }, []);
+  const navigate = useNavigate();
 
-  // Filtros (simple, puedes expandirlo)
   const [filtros, setFiltros] = useState({
     sexo: "",
     universidad: "",
@@ -68,13 +56,13 @@ export default function Search() {
     setFiltros({ ...filtros, [e.target.name]: e.target.value });
   };
 
-  // Filtros demo (puedes poblarlos desde backend o datos reales)
+  // Filtros demo
   const universidades = ["U. de Chile", "PUC", "UAI", "UDP"];
   const ciudades = ["Santiago", "Viña del Mar", "Concepción", "La Serena"];
   const comunas = ["Providencia", "Las Condes", "Ñuñoa", "Viña Centro"];
 
   // Simula filtrar (por ahora muestra todos)
-  const psicologosFiltrados = psicologosDemo; // Aquí agregarías lógica de filtrado real
+  const psicologosFiltrados = psicologosDemo;
 
   return (
     <div className="min-vh-100 d-flex flex-column bg-light">
@@ -92,9 +80,8 @@ export default function Search() {
             <div
               className="bg-secondary rounded-circle d-flex align-items-center justify-content-center me-3"
               style={{ width: 42, height: 42, cursor: "pointer" }}
-              data-bs-toggle="tooltip"
-              data-bs-placement="bottom"
               title="Cuenta"
+              onClick={() => navigate("/profile")}
             >
               {usuarioMock.foto
                 ? <img src={usuarioMock.foto} alt="perfil" className="rounded-circle" style={{ width: 40, height: 40, objectFit: "cover" }} />
@@ -104,13 +91,8 @@ export default function Search() {
             <button
               className="btn btn-link text-white fs-4 p-0"
               style={{ marginLeft: 10 }}
-              data-bs-toggle="tooltip"
-              data-bs-placement="bottom"
               title="Cerrar sesión"
-              onClick={() => {
-                // Lógica para cerrar sesión aquí
-                window.location.href = "/login";
-              }}
+              onClick={() => navigate("/")}
             >
               <i className="bi bi-box-arrow-right"></i>
             </button>
@@ -164,7 +146,12 @@ export default function Search() {
       <div className="container flex-grow-1 mb-5">
         <div className="row row-cols-1 row-cols-md-3 g-4">
           {psicologosFiltrados.map((p) => (
-            <div key={p.id} className="col">
+            <div
+              key={p.id}
+              className="col"
+              style={{ cursor: "pointer" }}
+              onClick={() => navigate(`/psychologist/${p.id}`)}
+            >
               <div className="card h-100 shadow-sm border-0 text-center p-3">
                 <div className="d-flex flex-column align-items-center mb-2">
                   {/* Foto circular fake */}
@@ -180,7 +167,6 @@ export default function Search() {
                   <div className="text-secondary">Edad: {p.edad}</div>
                   <div className="text-secondary">{p.ciudad}</div>
                 </div>
-                {/* Más info */}
               </div>
             </div>
           ))}

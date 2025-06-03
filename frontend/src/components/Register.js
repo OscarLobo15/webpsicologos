@@ -61,7 +61,6 @@ export default function Register() {
 
     if (!isFormValid) return;
 
-    alert("¡Registro enviado! (Aquí deberías conectar con tu backend)");
 
     // Si es paciente, redirige a /search
     if (tipo === "paciente") {
