@@ -1,19 +1,50 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function Profile() {
   const navigate = useNavigate();
+  const [perfil, setPerfil] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Simula datos del usuario
-  const usuario = {
-    nombre: "Usuario",
-    apellido: "Demo",
-    correo: "usuario@demo.com",
-    ciudad: "Santiago",
-    universidad: "U. de Chile",
-    descripcion: "Psicólogo con 10 años de experiencia...",
-    foto: "",
-  };
+  // Checa sesión y saca token/usuario
+  let usuario = null;
+  try {
+    usuario = JSON.parse(localStorage.getItem("user"));
+  } catch {
+    usuario = null;
+  }
+
+  useEffect(() => {
+    if (!usuario || !localStorage.getItem("token")) {
+      navigate("/login");
+      return;
+    }
+
+    const fetchPerfil = async () => {
+      try {
+        const response = await fetch("http://localhost:5000/api/profile", {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        });
+        const data = await response.json();
+        if (data.success) {
+          // Combina el perfil con el email guardado en usuario
+          setPerfil({
+            ...data.perfil,
+            email: usuario.email, // <-- Así agregas el correo
+          });
+        }
+      } catch {
+        // Puedes mostrar error si quieres
+      }
+      setLoading(false);
+    };
+
+    fetchPerfil();
+  }, [navigate, usuario]);
+
+  if (!usuario) return null;
 
   return (
     <div className="min-vh-100 d-flex flex-column bg-light">
@@ -31,15 +62,19 @@ export default function Profile() {
               title="Cuenta"
               onClick={() => navigate("/profile")}
             >
-              {usuario.foto
-                ? <img src={usuario.foto} alt="perfil" className="rounded-circle" style={{ width: 40, height: 40, objectFit: "cover" }} />
+              {perfil && perfil.foto_url
+                ? <img src={perfil.foto_url} alt="perfil" className="rounded-circle" style={{ width: 40, height: 40, objectFit: "cover" }} />
                 : <i className="bi bi-person fs-3 text-white" />}
             </div>
             <button
               className="btn btn-link text-white fs-4 p-0"
               style={{ marginLeft: 10 }}
               title="Cerrar sesión"
-              onClick={() => navigate("/")}
+              onClick={() => {
+                localStorage.removeItem("token");
+                localStorage.removeItem("user");
+                navigate("/login");
+              }}
             >
               <i className="bi bi-box-arrow-right"></i>
             </button>
@@ -50,24 +85,36 @@ export default function Profile() {
       {/* Perfil usuario */}
       <div className="d-flex flex-column align-items-center flex-grow-1">
         <div className="border rounded-4 shadow p-5 my-5 bg-white" style={{ maxWidth: 520, width: "100%" }}>
-          <div className="d-flex flex-column align-items-center">
-            {/* Foto circular */}
-            <div className="bg-secondary rounded-circle d-flex align-items-center justify-content-center mb-3"
-                 style={{ width: 80, height: 80 }}>
-              {usuario.foto
-                ? <img src={usuario.foto} alt="perfil" className="rounded-circle" style={{ width: 78, height: 78, objectFit: "cover" }} />
-                : <i className="bi bi-person fs-1 text-white" />}
+          {!loading && perfil ? (
+            <div className="d-flex flex-column align-items-center">
+              <div className="bg-secondary rounded-circle d-flex align-items-center justify-content-center mb-3"
+                   style={{ width: 80, height: 80 }}>
+                {perfil.foto_url
+                  ? <img src={perfil.foto_url} alt="perfil" className="rounded-circle" style={{ width: 78, height: 78, objectFit: "cover" }} />
+                  : <i className="bi bi-person fs-1 text-white" />}
+              </div>
+              <h2 className="mb-1">{perfil.nombre} {perfil.apellido}</h2>
+              {/* Aquí siempre mostrarás el correo, ya que lo tienes en perfil.email */}
+              <div className="text-secondary mb-3">{perfil.email}</div>
+              {perfil.ciudad && (
+                <div className="mb-2"><b>Ciudad:</b> {perfil.ciudad}</div>
+              )}
+              {perfil.universidad && (
+                <div className="mb-2"><b>Universidad:</b> {perfil.universidad}</div>
+              )}
+              {perfil.descripcion && (
+                <div className="mb-4"><b>Sobre mí:</b> {perfil.descripcion}</div>
+              )}
+              <button className="btn btn-outline-primary mb-3" onClick={() => navigate("/update")}>
+                Actualizar información
+              </button>
+              <button className="btn btn-secondary" onClick={() => navigate("/search")}>
+                ← Volver
+              </button>
             </div>
-            <h2 className="mb-1">{usuario.nombre} {usuario.apellido}</h2>
-            <div className="text-secondary mb-3">{usuario.correo}</div>
-            <div className="mb-2"><b>Ciudad:</b> {usuario.ciudad}</div>
-            <div className="mb-2"><b>Universidad:</b> {usuario.universidad}</div>
-            <div className="mb-4"><b>Sobre mí:</b> {usuario.descripcion}</div>
-            <button className="btn btn-outline-primary mb-3">Actualizar información</button>
-            <button className="btn btn-secondary" onClick={() => navigate("/search")}>
-              ← Volver
-            </button>
-          </div>
+          ) : (
+            <div className="text-center">Cargando perfil...</div>
+          )}
         </div>
       </div>
     </div>

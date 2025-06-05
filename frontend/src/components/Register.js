@@ -4,7 +4,7 @@ import "./Register.css";
 
 const opciones = [
   { value: "psicologo", label: "Soy Psicólogo/a" },
-  { value: "paciente", label: "Busco Psicólogo/a" }
+  { value: "cliente", label: "Busco Psicólogo/a" }
 ];
 
 const camposBase = {
@@ -27,6 +27,9 @@ export default function Register() {
   const [form, setForm] = useState({});
   const [touched, setTouched] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [mensaje, setMensaje] = useState("");
+  const [loading, setLoading] = useState(false);
+
   const navigate = useNavigate();
 
   const isRequiredEmpty = (campo) => {
@@ -55,24 +58,82 @@ export default function Register() {
     (c) => form[c] && form[c].trim() !== ""
   ) && (form.password1 === form.password2);
 
-  const handleSubmit = e => {
-    e.preventDefault();
-    setSubmitted(true);
-
-    if (!isFormValid) return;
-
-
-    // Si es paciente, redirige a /search
-    if (tipo === "paciente") {
-      navigate("/search");
+  // REGISTRO AL BACKEND
+  const backendRegister = async (data) => {
+    setLoading(true);
+    setMensaje("");
+    try {
+      const response = await fetch("http://localhost:5000/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+      });
+      const result = await response.json();
+      if (result.success) {
+        setMensaje("¡Registro exitoso! Ya puedes iniciar sesión.");
+        setForm({});
+        setSubmitted(false);
+        setTimeout(() => {
+          if (data.tipo_usuario === "cliente") {
+            navigate("/search");
+          } else {
+            navigate("/login"); // o la ruta que desees
+          }
+        }, 1800);
+      } else {
+        setMensaje(result.error || "Error al registrar usuario.");
+      }
+    } catch (err) {
+      setMensaje("Error de conexión con el servidor.");
     }
-    // Si es psicólogo, puedes redirigir a otra vista si lo deseas
+    setLoading(false);
   };
 
+  const handleSubmit = e => {
+    e.preventDefault();
+    setMensaje("");
+    setSubmitted(true);
+
+    if (!isFormValid) return;
+
+    // Construir el payload
+    const data = {
+      email: form.correo,
+      password: form.password1,
+      tipo_usuario: tipo, // "psicologo" o "cliente"
+      nombre: form.nombre,
+      apellido: form.apellido,
+    };
+
+    if (tipo === "psicologo") {
+      data.universidad = form.universidad;
+      data.titulo = form.titulo;
+      data.foto_url = form.foto; // OJO: este campo debe llamarse foto_url para la tabla
+      data.descripcion = form.descripcion;
+    }
+
+    backendRegister(data);
+  };
+
+  // Opción registro sin pago (solo para psicólogos, puedes adaptar si necesitas)
   const handleRegisterWithoutPay = () => {
+    setMensaje("");
     setSubmitted(true);
     if (!isFormValid) return;
-    alert("Registro sin pago enviado (prueba)");
+
+    const data = {
+      email: form.correo,
+      password: form.password1,
+      tipo_usuario: "psicologo",
+      nombre: form.nombre,
+      apellido: form.apellido,
+      universidad: form.universidad,
+      titulo: form.titulo,
+      foto_url: form.foto,
+      descripcion: form.descripcion,
+      suscripcion_pendiente: true // Si luego quieres usarlo en la tabla de suscripciones
+    };
+    backendRegister(data);
   };
 
   return (
@@ -278,20 +339,21 @@ export default function Register() {
                 <div className="alert alert-info">
                   <strong>¡Atención!</strong> Para activar tu perfil deberás realizar el pago de suscripción.
                 </div>
-                <button className="btn btn-primary w-100" type="submit">
-                  Pagar Ahora
+                <button className="btn btn-primary w-100" type="submit" disabled={loading}>
+                  {loading ? "Registrando..." : "Pagar Ahora"}
                 </button>
                 <button
                   type="button"
                   className="btn btn-outline-secondary btn-sm w-100 mt-3"
                   onClick={handleRegisterWithoutPay}
+                  disabled={loading}
                 >
                   Registrarme sin pagar
                 </button>
               </>
             ) : (
-              <button className="btn btn-primary w-100" type="submit">
-                Registrarme
+              <button className="btn btn-primary w-100" type="submit" disabled={loading}>
+                {loading ? "Registrando..." : "Registrarme"}
               </button>
             )}
 
@@ -300,6 +362,12 @@ export default function Register() {
                 ← Volver
               </button>
             </div>
+            {/* Mensaje de feedback */}
+            {mensaje && (
+              <div className={`alert mt-4 ${mensaje.startsWith("¡Registro exitoso") ? "alert-success" : "alert-danger"}`}>
+                {mensaje}
+              </div>
+            )}
           </form>
         )}
       </div>

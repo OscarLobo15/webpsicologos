@@ -1,55 +1,33 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-
-// Demo de psicólogos
-const psicologosDemo = [
-  {
-    id: 1,
-    nombre: "Ana",
-    apellido: "García",
-    edad: 35,
-    ciudad: "Santiago",
-    universidad: "U. de Chile",
-    descripcion: "Especialista en adolescentes. Más de 10 años de experiencia.",
-    foto: "",
-  },
-  {
-    id: 2,
-    nombre: "Carlos",
-    apellido: "Ruiz",
-    edad: 41,
-    ciudad: "Viña del Mar",
-    universidad: "PUC",
-    descripcion: "Atención en terapia familiar y de pareja.",
-    foto: "",
-  },
-  {
-    id: 3,
-    nombre: "Marta",
-    apellido: "Pérez",
-    edad: 29,
-    ciudad: "Concepción",
-    universidad: "UAI",
-    descripcion: "Terapia cognitivo-conductual. Experiencia en ansiedad y estrés.",
-    foto: "",
-  },
-  {
-    id: 4,
-    nombre: "Julio",
-    apellido: "Navarro",
-    edad: 50,
-    ciudad: "La Serena",
-    universidad: "UDP",
-    descripcion: "Psicólogo clínico, especialista en adultos mayores.",
-    foto: "",
-  },
-];
 
 export default function PsDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const psicologo = psicologosDemo.find(p => p.id === parseInt(id));
+  const [psicologo, setPsicologo] = useState(null);
+  const [loading, setLoading] = useState(true);
 
+  useEffect(() => {
+    // Traer info real del backend
+    const getPsicologo = async () => {
+      setLoading(true);
+      try {
+        const resp = await fetch(`http://localhost:5000/api/psychologists/${id}`);
+        const data = await resp.json();
+        if (data.success) {
+          setPsicologo(data.psicologo);
+        } else {
+          setPsicologo(null);
+        }
+      } catch {
+        setPsicologo(null);
+      }
+      setLoading(false);
+    };
+    getPsicologo();
+  }, [id]);
+
+  if (loading) return <div className="text-center mt-5">Cargando psicólogo...</div>;
   if (!psicologo) return <div className="text-center mt-5">Psicólogo no encontrado</div>;
 
   return (
@@ -88,14 +66,18 @@ export default function PsDetails() {
           <div className="d-flex flex-column align-items-center">
             <div className="bg-secondary rounded-circle d-flex align-items-center justify-content-center mb-3"
                  style={{ width: 80, height: 80 }}>
-              {psicologo.foto
-                ? <img src={psicologo.foto} alt="perfil" className="rounded-circle" style={{ width: 78, height: 78, objectFit: "cover" }} />
+              {psicologo.foto_url
+                ? <img src={psicologo.foto_url} alt="perfil" className="rounded-circle" style={{ width: 78, height: 78, objectFit: "cover" }} />
                 : <i className="bi bi-person fs-1 text-white" />}
             </div>
             <h2 className="mb-1">{psicologo.nombre} {psicologo.apellido}</h2>
-            <div className="text-secondary mb-2">Edad: {psicologo.edad}</div>
+            {psicologo.edad && (
+              <div className="text-secondary mb-2">Edad: {psicologo.edad}</div>
+            )}
             <div className="mb-2"><b>Ciudad:</b> {psicologo.ciudad}</div>
+            <div className="mb-2"><b>Comuna:</b> {psicologo.comuna}</div>
             <div className="mb-2"><b>Universidad:</b> {psicologo.universidad}</div>
+            <div className="mb-2"><b>Título:</b> {psicologo.titulo}</div>
             <div className="mb-4"><b>Sobre mí:</b> {psicologo.descripcion}</div>
             <button className="btn btn-success mb-3">Ver disponibilidad de hrs</button>
             <button className="btn btn-secondary" onClick={() => navigate("/search")}>
