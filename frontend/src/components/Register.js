@@ -20,6 +20,8 @@ const camposPsicologo = {
   titulo: "",
   foto: "",
   descripcion: "",
+  ciudad: "",
+  comuna: "",
 };
 
 export default function Register() {
@@ -58,7 +60,7 @@ export default function Register() {
     (c) => form[c] && form[c].trim() !== ""
   ) && (form.password1 === form.password2);
 
-  // REGISTRO AL BACKEND
+  // REGISTRO AL BACKEND (mejorado con token, perfil y redirección)
   const backendRegister = async (data) => {
     setLoading(true);
     setMensaje("");
@@ -69,17 +71,47 @@ export default function Register() {
         body: JSON.stringify(data)
       });
       const result = await response.json();
+
       if (result.success) {
-        setMensaje("¡Registro exitoso! Ya puedes iniciar sesión.");
-        setForm({});
-        setSubmitted(false);
-        setTimeout(() => {
-          if (data.tipo_usuario === "cliente") {
-            navigate("/search");
-          } else {
-            navigate("/login"); // o la ruta que desees
-          }
-        }, 1800);
+        // Guarda token y usuario si los retorna el backend
+        if (result.token) localStorage.setItem("token", result.token);
+        if (result.user) localStorage.setItem("user", JSON.stringify(result.user));
+
+        // Si hay token, consulta el perfil extendido y guárdalo también
+        if (result.token) {
+          fetch("http://localhost:5000/api/profile", {
+            method: "GET",
+            headers: { Authorization: "Bearer " + result.token }
+          })
+            .then(res => res.json())
+            .then(profileData => {
+              if (profileData.success) {
+                localStorage.setItem("perfil", JSON.stringify(profileData.perfil));
+              }
+              setMensaje("¡Registro exitoso! Serás redirigido...");
+              setForm({});
+              setSubmitted(false);
+              setTimeout(() => {
+                if (data.tipo_usuario === "cliente") {
+                  navigate("/search");
+                } else {
+                  navigate("/dashboard-psicologo");
+                }
+              }, 1200);
+            });
+        } else {
+          // Si no retorna token, redirige igual
+          setMensaje("¡Registro exitoso! Ya puedes iniciar sesión.");
+          setForm({});
+          setSubmitted(false);
+          setTimeout(() => {
+            if (data.tipo_usuario === "cliente") {
+              navigate("/search");
+            } else {
+              navigate("/dashboard-psicologo");
+            }
+          }, 1200);
+        }
       } else {
         setMensaje(result.error || "Error al registrar usuario.");
       }
@@ -108,14 +140,16 @@ export default function Register() {
     if (tipo === "psicologo") {
       data.universidad = form.universidad;
       data.titulo = form.titulo;
-      data.foto_url = form.foto; // OJO: este campo debe llamarse foto_url para la tabla
+      data.foto_url = form.foto; // OJO: debe llamarse foto_url
       data.descripcion = form.descripcion;
+      data.ciudad = form.ciudad;
+      data.comuna = form.comuna;
     }
 
     backendRegister(data);
   };
 
-  // Opción registro sin pago (solo para psicólogos, puedes adaptar si necesitas)
+  // Opción registro sin pago (solo para psicólogos)
   const handleRegisterWithoutPay = () => {
     setMensaje("");
     setSubmitted(true);
@@ -131,7 +165,9 @@ export default function Register() {
       titulo: form.titulo,
       foto_url: form.foto,
       descripcion: form.descripcion,
-      suscripcion_pendiente: true // Si luego quieres usarlo en la tabla de suscripciones
+      ciudad: form.ciudad,
+      comuna: form.comuna,
+      suscripcion_pendiente: true
     };
     backendRegister(data);
   };
@@ -231,6 +267,40 @@ export default function Register() {
                     value={form.titulo || ""}
                   />
                   {(submitted || touched.titulo) && isRequiredEmpty("titulo") && (
+                    <div className="text-danger mt-1" style={{ fontSize: "0.9em" }}>
+                      Este campo es obligatorio
+                    </div>
+                  )}
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Ciudad</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    name="ciudad"
+                    required
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    value={form.ciudad || ""}
+                  />
+                  {(submitted || touched.ciudad) && isRequiredEmpty("ciudad") && (
+                    <div className="text-danger mt-1" style={{ fontSize: "0.9em" }}>
+                      Este campo es obligatorio
+                    </div>
+                  )}
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Comuna</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    name="comuna"
+                    required
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    value={form.comuna || ""}
+                  />
+                  {(submitted || touched.comuna) && isRequiredEmpty("comuna") && (
                     <div className="text-danger mt-1" style={{ fontSize: "0.9em" }}>
                       Este campo es obligatorio
                     </div>

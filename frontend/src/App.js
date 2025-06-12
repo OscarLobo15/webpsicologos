@@ -5,9 +5,10 @@ import Register from "./components/Register";
 import Login from "./components/LogIn";
 import Search from "./components/Search";
 import Profile from "./components/Profile";
-import PsDetails from "./components/PsDetails"; 
+import PsDetails from "./components/PsDetails";
 import UpdateData from "./components/UpdateData";
-import ProtectedRoute from "./components/ProtectedRoute"; 
+import ProtectedRoute from "./components/ProtectedRoute";
+import DashboardPs from "./components/DashboardPs"; 
 
 function App() {
   return (
@@ -34,6 +35,14 @@ function App() {
           element={
             <ProtectedRoute>
               <UpdateData />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard-psicologo"
+          element={
+            <ProtectedRoute>
+              <DashboardPs />
             </ProtectedRoute>
           }
         />

@@ -3,6 +3,7 @@ const cors = require('cors');
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 app.use(cors());
@@ -10,6 +11,7 @@ app.use(express.json());
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
+// ================== REGISTRO DE USUARIO ==================
 app.post('/api/register', async (req, res) => {
   try {
     const {
@@ -21,17 +23,18 @@ app.post('/api/register', async (req, res) => {
       universidad,
       titulo,
       foto_url,
-      descripcion
+      descripcion,
+      ciudad,
+      comuna
     } = req.body;
 
     // Validación general
     if (!email || !password || !tipo_usuario || !nombre || !apellido) {
       return res.status(400).json({ success: false, error: "Faltan campos obligatorios." });
     }
-
     // Validación de campos de psicólogo
     if (tipo_usuario === 'psicologo') {
-      if (!universidad || !titulo || !foto_url || !descripcion) {
+      if (!universidad || !titulo || !foto_url || !descripcion || !ciudad || !comuna) {
         return res.status(400).json({ success: false, error: "Faltan datos obligatorios de psicólogo." });
       }
     }
@@ -57,13 +60,13 @@ app.post('/api/register', async (req, res) => {
         password: hashedPassword,
         tipo_usuario,
       }])
-      .select(); // Para obtener el id generado
+      .select();
 
     if (error) throw error;
 
     const usuario = inserted[0];
 
-    // Inserta en perfiles_psicologos o perfiles_clientes según corresponda
+    // Inserta en perfiles_psicologos o perfiles_clientes
     if (tipo_usuario === 'psicologo') {
       const { error: errorPerfil } = await supabase
         .from('perfiles_psicologos')
@@ -74,7 +77,9 @@ app.post('/api/register', async (req, res) => {
           universidad,
           titulo,
           foto_url,
-          descripcion
+          descripcion,
+          ciudad,
+          comuna
         }]);
       if (errorPerfil) throw errorPerfil;
     } else if (tipo_usuario === 'cliente') {
@@ -88,24 +93,22 @@ app.post('/api/register', async (req, res) => {
       if (errorCliente) throw errorCliente;
     }
 
-    // Puedes añadir lógica para suscripciones aquí si lo deseas
+    // Genera el JWT (igual que en login)
+    const payload = {
+      id: usuario.id,
+      email: usuario.email,
+      tipo_usuario: usuario.tipo_usuario
+    };
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
 
-    res.json({ success: true });
+    // Responde con usuario básico + token
+    res.json({ success: true, token, user: payload });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log('Servidor corriendo en puerto', PORT);
-});
-
-
-//INICIO DE SESIÓN
-const jwt = require('jsonwebtoken'); // arriba del archivo
-
-// Ruta de inicio de sesión
+// ================== INICIO DE SESIÓN ==================
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -147,13 +150,8 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-
-//PERFIL
+// ================== OBTENER PERFIL (TOKEN) ==================
 app.get('/api/profile', async (req, res) => {
-  // Debes validar el token JWT aquí y extraer el user.id y tipo_usuario
-  // (esto lo puedes hacer con un middleware, aquí va simple por demo)
-
-  // Recibe el token en el header Authorization
   const auth = req.headers.authorization;
   if (!auth) return res.status(401).json({ error: "No autorizado" });
 
@@ -169,7 +167,6 @@ app.get('/api/profile', async (req, res) => {
 
   let perfil = {};
   if (tipo_usuario === "psicologo") {
-    // Busca en perfiles_psicologos
     const { data, error } = await supabase
       .from('perfiles_psicologos')
       .select('*')
@@ -178,7 +175,6 @@ app.get('/api/profile', async (req, res) => {
     if (error) return res.status(500).json({ error: error.message });
     perfil = data;
   } else {
-    // Busca en perfiles_clientes
     const { data, error } = await supabase
       .from('perfiles_clientes')
       .select('*')
@@ -188,14 +184,11 @@ app.get('/api/profile', async (req, res) => {
     perfil = data;
   }
 
-  // Devuelve el perfil completo
   res.json({ success: true, perfil });
 });
 
-
-//ACTUALIZAR PERFIL
+// ================== ACTUALIZAR PERFIL ==================
 app.put('/api/profile', async (req, res) => {
-  // Extrae token y valida usuario
   const auth = req.headers.authorization;
   if (!auth) return res.status(401).json({ error: "No autorizado" });
 
@@ -211,7 +204,6 @@ app.put('/api/profile', async (req, res) => {
   const data = req.body;
 
   if (tipo_usuario === "psicologo") {
-    // Actualiza perfil psicólogo
     const { error } = await supabase
       .from('perfiles_psicologos')
       .update({
@@ -221,20 +213,19 @@ app.put('/api/profile', async (req, res) => {
         titulo: data.titulo,
         foto_url: data.foto_url,
         descripcion: data.descripcion,
-        // agrega aquí los campos permitidos
+        ciudad: data.ciudad,
+        comuna: data.comuna,
       })
       .eq('usuario_id', id);
 
     if (error) return res.status(500).json({ error: error.message });
     return res.json({ success: true });
   } else {
-    // Actualiza perfil cliente
     const { error } = await supabase
       .from('perfiles_clientes')
       .update({
         nombre: data.nombre,
         apellido: data.apellido,
-        // agrega aquí los campos permitidos
       })
       .eq('usuario_id', id);
 
@@ -243,11 +234,11 @@ app.put('/api/profile', async (req, res) => {
   }
 });
 
+// ================== BUSCADOR Y DETALLES DE PSICÓLOGOS ==================
 
-//DISPLAY INFO EN EL SEARCH
+// Mostrar sólo psicólogos con suscripción activa
 app.get('/api/psychologists', async (req, res) => {
-  // Selecciona solo psicólogos con suscripción activa
-  // 1. Busca usuarios tipo psicólogo
+  // Busca usuarios tipo psicólogo
   const { data: usuarios, error: usuariosError } = await supabase
     .from('usuarios')
     .select('id')
@@ -256,7 +247,7 @@ app.get('/api/psychologists', async (req, res) => {
 
   const psicologoIds = usuarios.map(u => u.id);
 
-  // 2. Busca suscripciones activas
+  // Busca suscripciones activas
   const { data: subs, error: subsError } = await supabase
     .from('suscripciones')
     .select('usuario_id')
@@ -266,7 +257,7 @@ app.get('/api/psychologists', async (req, res) => {
   const activosIds = subs.map(s => s.usuario_id).filter(id => psicologoIds.includes(id));
   if (activosIds.length === 0) return res.json({ success: true, psicologos: [] });
 
-  // 3. Busca perfiles de esos psicólogos activos
+  // Busca perfiles de esos psicólogos activos
   const { data: perfiles, error: perfilesError } = await supabase
     .from('perfiles_psicologos')
     .select('*')
@@ -276,8 +267,7 @@ app.get('/api/psychologists', async (req, res) => {
   res.json({ success: true, psicologos: perfiles });
 });
 
-
-// Busca perfil real del psicólogo por usuario_id
+// Detalle de psicólogo por usuario_id
 app.get('/api/psychologists/:id', async (req, res) => {
   const id = req.params.id;
   const { data, error } = await supabase
@@ -287,4 +277,10 @@ app.get('/api/psychologists/:id', async (req, res) => {
     .single();
   if (error || !data) return res.status(404).json({ success: false, error: "No encontrado" });
   res.json({ success: true, psicologo: data });
+});
+
+// ================== INICIA EL SERVIDOR ==================
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log('Servidor corriendo en puerto', PORT);
 });
