@@ -1,23 +1,17 @@
-import React from "react";
+// src/components/DashboardPs.js
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bar } from "react-chartjs-2";
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend
-} from 'chart.js';
+import FullCalendar from "@fullcalendar/react";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import interactionPlugin from "@fullcalendar/interaction";
+import dayjs from "dayjs";
+import toast, { Toaster } from "react-hot-toast";
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
-
-// --------- NAVBAR DEL DASHBOARD (IGUAL QUE SEARCH PERO SIN FILTROS) ---------
 function DashboardNavbar() {
   const navigate = useNavigate();
   const isLogged = !!localStorage.getItem("token");
   let usuarioInfo = null;
+
   if (isLogged) {
     try {
       usuarioInfo = JSON.parse(localStorage.getItem("user"));
@@ -61,7 +55,6 @@ function DashboardNavbar() {
               </div>
               <button
                 className="btn btn-link text-white fs-4 p-0"
-                style={{ marginLeft: 10 }}
                 title="Cerrar sesión"
                 onClick={() => {
                   localStorage.removeItem("token");
@@ -79,107 +72,151 @@ function DashboardNavbar() {
   );
 }
 
-// ----------- MOCK DATA (puedes conectar luego a backend) -----------
-const pacientesDelDia = [
-  { nombre: "Juan Pérez", hora: "09:00" },
-  { nombre: "Ana Soto", hora: "11:30" },
-  { nombre: "María Gómez", hora: "15:00" },
-];
-
-const pacientesPorDia = {
-  labels: ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"],
-  data: [4, 3, 5, 2, 6, 0, 0]
-};
-
-const pacientesMensuales = 37;
-const horasSemana = 14.5;
-
-// -------- DASHBOARD --------
 export default function DashboardPs() {
+  const [eventos, setEventos] = useState([]);
+  const user = JSON.parse(localStorage.getItem("user"));
+
+  const fetchEventos = async () => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/horarios/psicologo/${user.id}`);
+      const json = await res.json();
+      if (json.success) {
+        const eventosFormateados = json.data.map(ev => {
+          const horaLimpia = ev.hora.slice(0, 5);
+          return {
+            id: ev.id,
+            title: ev.disponible ? "🟦 Disponible" : "🔴 Reservado",
+            start: `${ev.fecha}T${horaLimpia}`,
+            end: dayjs(`${ev.fecha}T${horaLimpia}`).add(1, "hour").toISOString(),
+            backgroundColor: ev.disponible ? "#007bff" : "#dc3545",
+            editable: ev.disponible,
+            extendedProps: { disponible: ev.disponible }
+          };
+        });
+        setEventos(eventosFormateados);
+      } else {
+        toast.error("No se pudieron cargar los horarios");
+      }
+    } catch (e) {
+      console.error("Error cargando horarios:", e);
+      toast.error("Error al cargar los horarios");
+    }
+  };
+
+  useEffect(() => {
+    fetchEventos();
+  }, []);
+
+  const handleSelect = async (info) => {
+    const start = dayjs(info.start);
+    const end = dayjs(info.end);
+    const diffMin = end.diff(start, 'minute');
+
+    if (diffMin !== 30 && diffMin !== 60) {
+      toast.error("Solo puedes agregar bloques de 30 o 60 minutos");
+      return;
+    }
+
+    const fecha = start.format("YYYY-MM-DD");
+    const hora = start.format("HH:mm");
+
+    try {
+      await fetch(`http://localhost:5000/api/horarios/${user.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fecha, hora, disponible: true })
+      });
+      toast.success("Bloque agregado");
+      fetchEventos();
+    } catch (err) {
+      toast.error("Error al guardar la disponibilidad");
+    }
+  };
+
+  const handleEventClick = async (clickInfo) => {
+    const id = clickInfo.event.id;
+    const disponible = clickInfo.event.extendedProps.disponible;
+    if (!disponible) return;
+
+    if (window.confirm("¿Deseas eliminar este horario?")) {
+      try {
+        await fetch(`http://localhost:5000/api/horarios/${id}`, { method: "DELETE" });
+        toast.success("Bloque eliminado");
+        fetchEventos();
+      } catch (err) {
+        toast.error("Error al eliminar el bloque");
+      }
+    }
+  };
+
+  const handleEventDrop = async (info) => {
+    const id = info.event.id;
+    const nuevaFecha = dayjs(info.event.start).format("YYYY-MM-DD");
+    const nuevaHora = dayjs(info.event.start).format("HH:mm");
+
+    try {
+      await fetch(`http://localhost:5000/api/horarios/${id}`, { method: "DELETE" });
+      await fetch(`http://localhost:5000/api/horarios/${user.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fecha: nuevaFecha, hora: nuevaHora, disponible: true })
+      });
+      toast.success("Bloque movido");
+      fetchEventos();
+    } catch (err) {
+      toast.error("Error al mover el bloque");
+    }
+  };
+
+  const repetir4Semanas = async () => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/horarios/repetir/${user.id}`, {
+        method: "POST"
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success("Semana replicada 4 veces");
+        fetchEventos();
+      } else {
+        toast.error("No se pudo repetir la semana");
+      }
+    } catch (err) {
+      toast.error("Error al repetir bloques");
+    }
+  };
+
   return (
     <div className="min-vh-100 d-flex flex-column bg-light">
       <DashboardNavbar />
+      <div className="container my-5">
+        <h4 className="mb-4 fw-bold">Gestión de Disponibilidad Semanal</h4>
+        <button onClick={repetir4Semanas} className="btn btn-outline-success mb-3">
+          Repetir esta semana por 4 semanas
+        </button>
 
-      <div className="container mb-5 mt-3">
-        {/* LISTADO DE PACIENTES DEL DÍA Y GRÁFICO */}
-        <div className="row g-4">
-          {/* Listado de pacientes del día */}
-          <div className="col-12 col-lg-6">
-            <div className="card h-100 shadow-sm">
-              <div className="card-header bg-primary text-white fw-bold">
-                Pacientes del día
-              </div>
-              <div className="card-body">
-                {pacientesDelDia.length === 0 ? (
-                  <div className="text-muted">No tienes pacientes agendados para hoy.</div>
-                ) : (
-                  <ul className="list-group list-group-flush">
-                    {pacientesDelDia.map((p, i) => (
-                      <li key={i} className="list-group-item d-flex justify-content-between align-items-center">
-                        <span>{p.nombre}</span>
-                        <span className="badge bg-secondary">{p.hora}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          </div>
-          {/* Gráfico de pacientes diarios */}
-          <div className="col-12 col-lg-6">
-            <div className="card h-100 shadow-sm">
-              <div className="card-header bg-primary text-white fw-bold">
-                Pacientes diarios (semana)
-              </div>
-              <div className="card-body">
-                <Bar
-                  data={{
-                    labels: pacientesPorDia.labels,
-                    datasets: [
-                      {
-                        label: "Cantidad de pacientes",
-                        data: pacientesPorDia.data,
-                        backgroundColor: "rgba(54,162,235,0.7)",
-                        borderRadius: 6,
-                      },
-                    ],
-                  }}
-                  options={{
-                    plugins: {
-                      legend: { display: false },
-                    },
-                    scales: {
-                      y: { beginAtZero: true, ticks: { stepSize: 1 } }
-                    },
-                  }}
-                  height={170}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* DATOS DE PACIENTES MENSUALES Y HORAS SEMANA */}
-        <div className="row mt-4 g-4">
-          <div className="col-12 col-md-6">
-            <div className="card shadow-sm">
-              <div className="card-body d-flex flex-column align-items-center">
-                <h6 className="mb-2 text-muted">Pacientes mensuales</h6>
-                <div className="display-4 fw-bold text-primary">{pacientesMensuales}</div>
-              </div>
-            </div>
-          </div>
-          <div className="col-12 col-md-6">
-            <div className="card shadow-sm">
-              <div className="card-body d-flex flex-column align-items-center">
-                <h6 className="mb-2 text-muted">Horas trabajadas (semana actual)</h6>
-                <div className="display-4 fw-bold text-primary">{horasSemana}</div>
-                <span className="text-muted">horas</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <FullCalendar
+          plugins={[timeGridPlugin, interactionPlugin]}
+          initialView="timeGridWeek"
+          selectable={true}
+          selectMirror={true}
+          select={handleSelect}
+          events={eventos}
+          eventClick={handleEventClick}
+          eventDrop={handleEventDrop}
+          editable={true}
+          slotDuration="00:30:00"
+          slotMinTime="08:00:00"
+          slotMaxTime="22:00:00"
+          allDaySlot={false}
+          height="auto"
+          locale="es"
+          nowIndicator={true}
+          eventOverlap={false}
+          eventDisplay="block"
+          headerToolbar={{ start: "prev,next today", center: "title", end: "" }}
+        />
       </div>
+      <Toaster position="bottom-right" reverseOrder={false} />
     </div>
   );
 }
