@@ -1,4 +1,3 @@
-// src/components/DashboardPs.js
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import FullCalendar from "@fullcalendar/react";
@@ -7,74 +6,17 @@ import interactionPlugin from "@fullcalendar/interaction";
 import dayjs from "dayjs";
 import toast, { Toaster } from "react-hot-toast";
 
-function DashboardNavbar() {
-  const navigate = useNavigate();
-  const isLogged = !!localStorage.getItem("token");
-  let usuarioInfo = null;
-
-  if (isLogged) {
-    try {
-      usuarioInfo = JSON.parse(localStorage.getItem("user"));
-    } catch {
-      usuarioInfo = null;
-    }
-  }
-
-  return (
-    <nav className="navbar navbar-expand-lg custom-navbar shadow-sm px-4">
-      <div className="container-fluid d-flex justify-content-between align-items-center">
-        <div className="d-flex align-items-center">
-          <img
-            src="https://upload.wikimedia.org/wikipedia/commons/a/a7/React-icon.svg"
-            alt="Logo"
-            style={{ width: 44, height: 44, marginRight: 10 }}
-          />
-          <span className="navbar-brand mb-0 h1 fs-4 fw-bold text-light">
-            WebPsicologos
-          </span>
-        </div>
-        <div className="d-flex align-items-center">
-          {isLogged && (
-            <>
-              <div
-                className="bg-secondary rounded-circle d-flex align-items-center justify-content-center me-3"
-                style={{ width: 42, height: 42, cursor: "pointer" }}
-                title="Cuenta"
-                onClick={() => navigate("/profile")}
-              >
-                {usuarioInfo && usuarioInfo.foto_url ? (
-                  <img
-                    src={usuarioInfo.foto_url}
-                    alt="perfil"
-                    className="rounded-circle"
-                    style={{ width: 40, height: 40, objectFit: "cover" }}
-                  />
-                ) : (
-                  <i className="bi bi-person fs-3 text-white" />
-                )}
-              </div>
-              <button
-                className="btn btn-link text-white fs-4 p-0"
-                title="Cerrar sesión"
-                onClick={() => {
-                  localStorage.removeItem("token");
-                  localStorage.removeItem("user");
-                  navigate("/");
-                }}
-              >
-                <i className="bi bi-box-arrow-right"></i>
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </nav>
-  );
-}
-
 export default function DashboardPs() {
-  const [eventos, setEventos] = useState([]);
+  const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem("user"));
+
+  const [eventos, setEventos] = useState([]);
+  const [citasSemana, setCitasSemana] = useState(0);
+  const [pacientesNuevos, setPacientesNuevos] = useState(0);
+  const [sesionesMes, setSesionesMes] = useState(0);
+  const [proximasCitas, setProximasCitas] = useState([]);
+  const [gananciaTeorica, setGananciaTeorica] = useState(0);
+  const [gananciaAjustada, setGananciaAjustada] = useState(0);
 
   const fetchEventos = async () => {
     try {
@@ -88,7 +30,7 @@ export default function DashboardPs() {
             title: ev.disponible ? "🟦 Disponible" : "🔴 Reservado",
             start: `${ev.fecha}T${horaLimpia}`,
             end: dayjs(`${ev.fecha}T${horaLimpia}`).add(1, "hour").toISOString(),
-            backgroundColor: ev.disponible ? "#007bff" : "#dc3545",
+            backgroundColor: ev.disponible ? "#3b82f6" : "#dc2626",
             editable: ev.disponible,
             extendedProps: { disponible: ev.disponible }
           };
@@ -97,23 +39,39 @@ export default function DashboardPs() {
       } else {
         toast.error("No se pudieron cargar los horarios");
       }
-    } catch (e) {
-      console.error("Error cargando horarios:", e);
+    } catch {
       toast.error("Error al cargar los horarios");
+    }
+  };
+
+  const fetchDashboardInfo = async () => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/dashboard/info/${user.id}`);
+      const json = await res.json();
+      if (json.success) {
+        setCitasSemana(json.data.citasSemana);
+        setPacientesNuevos(json.data.pacientesNuevos);
+        setSesionesMes(json.data.sesionesMes);
+        setProximasCitas(json.data.proximasCitas);
+        setGananciaTeorica(json.data.gananciaTeorica);
+        setGananciaAjustada(json.data.gananciaAjustada);
+      }
+    } catch {
+      toast.error("Error al cargar datos del dashboard");
     }
   };
 
   useEffect(() => {
     fetchEventos();
+    fetchDashboardInfo();
   }, []);
 
   const handleSelect = async (info) => {
     const start = dayjs(info.start);
     const end = dayjs(info.end);
-    const diffMin = end.diff(start, 'minute');
 
-    if (diffMin !== 30 && diffMin !== 60) {
-      toast.error("Solo puedes agregar bloques de 30 o 60 minutos");
+    if (![30, 60].includes(end.diff(start, 'minute'))) {
+      toast.error("Solo bloques de 30 o 60 minutos");
       return;
     }
 
@@ -128,8 +86,8 @@ export default function DashboardPs() {
       });
       toast.success("Bloque agregado");
       fetchEventos();
-    } catch (err) {
-      toast.error("Error al guardar la disponibilidad");
+    } catch {
+      toast.error("Error al guardar disponibilidad");
     }
   };
 
@@ -138,13 +96,13 @@ export default function DashboardPs() {
     const disponible = clickInfo.event.extendedProps.disponible;
     if (!disponible) return;
 
-    if (window.confirm("¿Deseas eliminar este horario?")) {
+    if (window.confirm("¿Eliminar este horario?")) {
       try {
         await fetch(`http://localhost:5000/api/horarios/${id}`, { method: "DELETE" });
         toast.success("Bloque eliminado");
         fetchEventos();
-      } catch (err) {
-        toast.error("Error al eliminar el bloque");
+      } catch {
+        toast.error("Error al eliminar bloque");
       }
     }
   };
@@ -163,16 +121,14 @@ export default function DashboardPs() {
       });
       toast.success("Bloque movido");
       fetchEventos();
-    } catch (err) {
-      toast.error("Error al mover el bloque");
+    } catch {
+      toast.error("Error al mover bloque");
     }
   };
 
   const repetir4Semanas = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/horarios/repetir/${user.id}`, {
-        method: "POST"
-      });
+      const res = await fetch(`http://localhost:5000/api/horarios/repetir/${user.id}`, { method: "POST" });
       const json = await res.json();
       if (json.success) {
         toast.success("Semana replicada 4 veces");
@@ -180,19 +136,28 @@ export default function DashboardPs() {
       } else {
         toast.error("No se pudo repetir la semana");
       }
-    } catch (err) {
+    } catch {
       toast.error("Error al repetir bloques");
     }
   };
 
   return (
-    <div className="min-vh-100 d-flex flex-column bg-light">
-      <DashboardNavbar />
-      <div className="container my-5">
-        <h4 className="mb-4 fw-bold">Gestión de Disponibilidad Semanal</h4>
-        <button onClick={repetir4Semanas} className="btn btn-outline-success mb-3">
-          Repetir esta semana por 4 semanas
-        </button>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 px-6 py-8">
+      <h2 className="text-3xl font-bold text-blue-800 mb-6">Bienvenido, {user?.nombre}</h2>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <SummaryCard title="Sesiones esta semana" value={citasSemana} />
+        <SummaryCard title="Pacientes nuevos" value={pacientesNuevos} />
+        <SummaryCard title="Total de sesiones" value={sesionesMes} />
+      </div>
+
+      <div className="bg-white p-6 rounded-3xl shadow-lg mb-8">
+        <div className="flex justify-between items-center mb-4">
+          <h4 className="text-xl font-bold text-blue-800">Mi Calendario</h4>
+          <button onClick={repetir4Semanas} className="bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700">
+            Repetir semana x4
+          </button>
+        </div>
 
         <FullCalendar
           plugins={[timeGridPlugin, interactionPlugin]}
@@ -216,7 +181,48 @@ export default function DashboardPs() {
           headerToolbar={{ start: "prev,next today", center: "title", end: "" }}
         />
       </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="bg-white p-6 rounded-2xl shadow">
+          <h4 className="text-lg font-bold text-blue-800 mb-4">Próximas Citas</h4>
+          <ul className="space-y-3">
+            {proximasCitas.map((cita, index) => (
+              <li key={index} className="flex justify-between items-center bg-blue-50 p-3 rounded-xl">
+                <div>
+                  <p className="font-semibold text-blue-700">{cita.nombre_paciente}</p>
+                  <p className="text-sm text-blue-600">{dayjs(cita.fecha).format("dddd DD/MM")} • {cita.hora} • {cita.modalidad}</p>
+                </div>
+                <span className="text-sm font-medium text-gray-500">{cita.estado}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow">
+          <h4 className="text-lg font-bold text-blue-800 mb-4">Reportes Monetarios</h4>
+          <div className="grid grid-cols-1 gap-4">
+            <div className="bg-green-100 p-4 rounded-xl text-center">
+              <p className="text-blue-900 font-semibold mb-2">Ganancia Total Estimada</p>
+              <p className="text-3xl font-bold text-green-700">${gananciaTeorica}</p>
+            </div>
+            <div className="bg-yellow-100 p-4 rounded-xl text-center">
+              <p className="text-blue-900 font-semibold mb-2">Ganancia (90%)</p>
+              <p className="text-3xl font-bold text-yellow-600">${gananciaAjustada}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <Toaster position="bottom-right" reverseOrder={false} />
+    </div>
+  );
+}
+
+function SummaryCard({ title, value }) {
+  return (
+    <div className="bg-blue-100 p-4 rounded-2xl shadow text-center">
+      <h4 className="font-semibold text-blue-800 mb-2">{title}</h4>
+      <p className="text-3xl font-bold text-blue-600">{value}</p>
     </div>
   );
 }

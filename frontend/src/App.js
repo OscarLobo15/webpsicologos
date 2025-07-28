@@ -11,6 +11,7 @@ import UpdateData from "./components/UpdateData";
 import ProtectedRoute from "./components/ProtectedRoute";
 import DashboardPs from "./components/DashboardPs";
 import ReservarHora from "./components/ReservarHora";
+import PsychologistLandingPage from "./components/PsychologistLandingPage";
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
         <Route path="/search" element={<Search />} />
         <Route path="/psychologist/:id" element={<PsDetails />} />
         <Route path="/reservar/:id" element={<ReservarHora />} />
+        <Route path="/psicoconecta" element={<PsychologistLandingPage />} />
 
         {/* Rutas protegidas */}
         <Route

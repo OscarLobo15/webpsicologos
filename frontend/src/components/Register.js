@@ -1,66 +1,97 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import "./Register.css";
-
-const opciones = [
-  { value: "psicologo", label: "Soy Psicólogo/a" },
-  { value: "cliente", label: "Busco Psicólogo/a" }
-];
-
-const camposBase = {
-  nombre: "",
-  apellido: "",
-  correo: "",
-  password1: "",
-  password2: "",
-};
-
-const camposPsicologo = {
-  universidad: "",
-  titulo: "",
-  foto: "",
-  descripcion: "",
-  ciudad: "",
-  comuna: "",
-};
+import { Listbox, Combobox } from "@headlessui/react";
+import { ChevronDownIcon, CheckIcon } from "@heroicons/react/20/solid";
 
 export default function Register() {
-  const [tipo, setTipo] = useState("");
   const [form, setForm] = useState({});
-  const [touched, setTouched] = useState({});
-  const [submitted, setSubmitted] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
+  
+  // Estados para los datos
+  const [ciudades, setCiudades] = useState([]);
+  const [comunas, setComunas] = useState([]);
+  const [comunasFiltradas, setComunasFiltradas] = useState([]);
+  const [universidades, setUniversidades] = useState([]);
+  const [universidadesFiltradas, setUniversidadesFiltradas] = useState([]);
+  
+  // Estados para selecciones
+  const [ciudadSeleccionada, setCiudadSeleccionada] = useState(null);
+  const [universidadQuery, setUniversidadQuery] = useState("");
 
   const navigate = useNavigate();
 
-  const isRequiredEmpty = (campo) => {
-    if (tipo === "psicologo" && Object.keys(camposPsicologo).includes(campo)) {
-      return !form[campo];
+  const safeArray = (data) => Array.isArray(data) ? data : [];
+
+  useEffect(() => {
+    const cargarDatos = async () => {
+      setLoadingData(true);
+      try {
+        // Cargar datos en paralelo
+        const [ciudadesRes, comunasRes, universidadesRes] = await Promise.all([
+          fetch("/api/ciudades").then(r => r.json()),
+          fetch("/api/comunas").then(r => r.json()),
+          fetch("/api/universidades").then(r => r.json())
+        ]);
+
+        console.log("👉 Ciudades:", ciudadesRes);
+        console.log("👉 Comunas:", comunasRes);
+        console.log("👉 Universidades:", universidadesRes);
+
+        setCiudades(safeArray(ciudadesRes));
+        setComunas(safeArray(comunasRes));
+        setUniversidades(safeArray(universidadesRes));
+        setUniversidadesFiltradas(safeArray(universidadesRes));
+      } catch (error) {
+        console.error("Error cargando datos:", error);
+        setMensaje("Error al cargar datos de ubicación. Intenta recargar la página.");
+      } finally {
+        setLoadingData(false);
+      }
+    };
+
+    cargarDatos();
+  }, []);
+
+  // Filtrar comunas cuando se selecciona una ciudad
+  useEffect(() => {
+    if (ciudadSeleccionada && comunas.length > 0) {
+      const filtradas = comunas.filter(comuna => 
+        comuna.provincia && 
+        comuna.provincia.region && 
+        comuna.provincia.region.codigo === ciudadSeleccionada.codigo
+      );
+      setComunasFiltradas(filtradas);
+      
+      // Limpiar comuna seleccionada si no está en la nueva ciudad
+      if (form.comuna && !filtradas.find(c => c.nombre === form.comuna)) {
+        setForm(prev => ({ ...prev, comuna: null }));
+      }
+    } else {
+      setComunasFiltradas([]);
     }
-    if (Object.keys(camposBase).includes(campo)) {
-      return !form[campo];
+  }, [ciudadSeleccionada, comunas, form.comuna]);
+
+  // Filtrar universidades según la búsqueda
+  useEffect(() => {
+    if (universidadQuery === "") {
+      setUniversidadesFiltradas(universidades);
+    } else {
+      const filtradas = universidades.filter(uni =>
+        uni.toLowerCase().includes(universidadQuery.toLowerCase())
+      );
+      setUniversidadesFiltradas(filtradas);
     }
-    return false;
-  };
+  }, [universidadQuery, universidades]);
 
-  const handleChange = e => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
+  const isFormValid = form.nombre && form.apellido && form.correo &&
+    form.password1 && form.password2 &&
+    form.universidad && form.titulo &&
+    form.descripcion && form.foto &&
+    form.ciudad && form.comuna &&
+    form.password1 === form.password2;
 
-  const handleBlur = e => {
-    setTouched({ ...touched, [e.target.name]: true });
-  };
-
-  const camposRequeridos = tipo === "psicologo"
-    ? { ...camposBase, ...camposPsicologo }
-    : camposBase;
-
-  const isFormValid = Object.keys(camposRequeridos).every(
-    (c) => form[c] && form[c].trim() !== ""
-  ) && (form.password1 === form.password2);
-
-  // REGISTRO AL BACKEND (mejorado con token, perfil y redirección)
   const backendRegister = async (data) => {
     setLoading(true);
     setMensaje("");
@@ -73,49 +104,14 @@ export default function Register() {
       const result = await response.json();
 
       if (result.success) {
-        // Guarda token y usuario si los retorna el backend
-        if (result.token) localStorage.setItem("token", result.token);
-        if (result.user) localStorage.setItem("user", JSON.stringify(result.user));
-
-        // Si hay token, consulta el perfil extendido y guárdalo también
-        if (result.token) {
-          fetch("http://localhost:5000/api/profile", {
-            method: "GET",
-            headers: { Authorization: "Bearer " + result.token }
-          })
-            .then(res => res.json())
-            .then(profileData => {
-              if (profileData.success) {
-                localStorage.setItem("perfil", JSON.stringify(profileData.perfil));
-              }
-              setMensaje("¡Registro exitoso! Serás redirigido...");
-              setForm({});
-              setSubmitted(false);
-              setTimeout(() => {
-                if (data.tipo_usuario === "cliente") {
-                  navigate("/search");
-                } else {
-                  navigate("/dashboard-psicologo");
-                }
-              }, 1200);
-            });
-        } else {
-          // Si no retorna token, redirige igual
-          setMensaje("¡Registro exitoso! Ya puedes iniciar sesión.");
-          setForm({});
-          setSubmitted(false);
-          setTimeout(() => {
-            if (data.tipo_usuario === "cliente") {
-              navigate("/search");
-            } else {
-              navigate("/dashboard-psicologo");
-            }
-          }, 1200);
-        }
+        localStorage.setItem("token", result.token);
+        localStorage.setItem("user", JSON.stringify(result.user));
+        setMensaje("¡Registro exitoso! Serás redirigido...");
+        setTimeout(() => navigate("/dashboard-psicologo"), 1200);
       } else {
         setMensaje(result.error || "Error al registrar usuario.");
       }
-    } catch (err) {
+    } catch {
       setMensaje("Error de conexión con el servidor.");
     }
     setLoading(false);
@@ -123,38 +119,27 @@ export default function Register() {
 
   const handleSubmit = e => {
     e.preventDefault();
-    setMensaje("");
-    setSubmitted(true);
-
     if (!isFormValid) return;
 
-    // Construir el payload
     const data = {
       email: form.correo,
       password: form.password1,
-      tipo_usuario: tipo, // "psicologo" o "cliente"
+      tipo_usuario: "psicologo",
       nombre: form.nombre,
       apellido: form.apellido,
+      universidad: form.universidad,
+      titulo: form.titulo,
+      foto_url: form.foto,
+      descripcion: form.descripcion,
+      ciudad: form.ciudad,
+      comuna: form.comuna
     };
-
-    if (tipo === "psicologo") {
-      data.universidad = form.universidad;
-      data.titulo = form.titulo;
-      data.foto_url = form.foto; // OJO: debe llamarse foto_url
-      data.descripcion = form.descripcion;
-      data.ciudad = form.ciudad;
-      data.comuna = form.comuna;
-    }
 
     backendRegister(data);
   };
 
-  // Opción registro sin pago (solo para psicólogos)
   const handleRegisterWithoutPay = () => {
-    setMensaje("");
-    setSubmitted(true);
     if (!isFormValid) return;
-
     const data = {
       email: form.correo,
       password: form.password1,
@@ -172,275 +157,284 @@ export default function Register() {
     backendRegister(data);
   };
 
-  return (
-    <div className="register-bg min-vh-100 d-flex flex-column align-items-center">
-      <div className="register-card border rounded-4 shadow p-5 mt-5 bg-white" style={{ maxWidth: 520, width: "100%" }}>
-        <h2 className="text-center text-primary fw-bold mb-4">Crea tu cuenta</h2>
+  const handleCiudadChange = (ciudad) => {
+    setCiudadSeleccionada(ciudad);
+    setForm(prev => ({ 
+      ...prev, 
+      ciudad: ciudad.nombre,
+      comuna: null // Resetear comuna cuando cambia ciudad
+    }));
+  };
 
-        {/* Paso 1: Selección de tipo de usuario */}
-        {!tipo && (
-          <>
-            <p className="text-center mb-4">¿Cómo quieres usar WebPsicologos?</p>
-            <div className="d-flex justify-content-center gap-3">
-              {opciones.map(opt => (
-                <button
-                  key={opt.value}
-                  className="btn btn-outline-primary btn-lg"
-                  onClick={() => setTipo(opt.value)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-
-        {/* Paso 2: Formulario según tipo */}
-        {tipo && (
-          <form className="mt-4" onSubmit={handleSubmit} noValidate>
-            {/* Nombre */}
-            <div className="mb-3">
-              <label className="form-label">Nombre</label>
-              <input
-                type="text"
-                className="form-control"
-                name="nombre"
-                required
-                onChange={handleChange}
-                onBlur={handleBlur}
-                value={form.nombre || ""}
+  // Componente personalizado para Listbox
+  const CustomListbox = ({ label, value, onChange, options, disabled = false, placeholder }) => (
+    <div className="mb-4">
+      <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+      <Listbox value={value} onChange={onChange} disabled={disabled}>
+        <div className="relative">
+          <Listbox.Button className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left shadow-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed">
+            <span className={`block truncate ${!value ? 'text-gray-400' : 'text-gray-900'}`}>
+              {value || placeholder || `Selecciona ${label}`}
+            </span>
+            <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+              <ChevronDownIcon
+                className="h-5 w-5 text-gray-400"
+                aria-hidden="true"
               />
-              {(submitted || touched.nombre) && isRequiredEmpty("nombre") && (
-                <div className="text-danger mt-1" style={{ fontSize: "0.9em" }}>
-                  Este campo es obligatorio
-                </div>
-              )}
-            </div>
-            {/* Apellido */}
-            <div className="mb-3">
-              <label className="form-label">Apellido</label>
-              <input
-                type="text"
-                className="form-control"
-                name="apellido"
-                required
-                onChange={handleChange}
-                onBlur={handleBlur}
-                value={form.apellido || ""}
-              />
-              {(submitted || touched.apellido) && isRequiredEmpty("apellido") && (
-                <div className="text-danger mt-1" style={{ fontSize: "0.9em" }}>
-                  Este campo es obligatorio
-                </div>
-              )}
-            </div>
+            </span>
+          </Listbox.Button>
+          <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+            {safeArray(options).map((option, idx) => (
+              <Listbox.Option
+                key={idx}
+                className={({ active, selected }) =>
+                  `relative cursor-default select-none py-2 pl-10 pr-4 ${
+                    active ? 'bg-blue-100 text-blue-900' : 'text-gray-900'
+                  }`
+                }
+                value={option}
+              >
+                {({ selected }) => (
+                  <>
+                    <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
+                      {typeof option === 'string' ? option : option.nombre}
+                    </span>
+                    {selected && (
+                      <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-blue-600">
+                        <CheckIcon className="h-5 w-5" aria-hidden="true" />
+                      </span>
+                    )}
+                  </>
+                )}
+              </Listbox.Option>
+            ))}
+          </Listbox.Options>
+        </div>
+      </Listbox>
+    </div>
+  );
 
-            {/* Campos solo para psicólogos */}
-            {tipo === "psicologo" && (
-              <>
-                <div className="mb-3">
-                  <label className="form-label">Universidad</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    name="universidad"
-                    required
-                    onChange={handleChange}
-                    onBlur={handleBlur}
-                    value={form.universidad || ""}
-                  />
-                  {(submitted || touched.universidad) && isRequiredEmpty("universidad") && (
-                    <div className="text-danger mt-1" style={{ fontSize: "0.9em" }}>
-                      Este campo es obligatorio
-                    </div>
+  // Componente Combobox para universidades con búsqueda
+  const UniversidadCombobox = () => (
+    <div className="mb-4">
+      <label className="block text-sm font-medium text-gray-700 mb-2">Universidad</label>
+      <Combobox value={form.universidad} onChange={(value) => setForm({ ...form, universidad: value })}>
+        <div className="relative">
+          <Combobox.Input
+            className="w-full rounded-lg border border-gray-300 bg-white py-3 pl-3 pr-10 shadow-md focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            displayValue={(universidad) => universidad}
+            onChange={(event) => setUniversidadQuery(event.target.value)}
+            placeholder="Busca y selecciona tu universidad"
+          />
+          <Combobox.Button className="absolute inset-y-0 right-0 flex items-center pr-2">
+            <ChevronDownIcon
+              className="h-5 w-5 text-gray-400"
+              aria-hidden="true"
+            />
+          </Combobox.Button>
+        </div>
+        <Combobox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+          {universidadesFiltradas.map((universidad, idx) => (
+            <Combobox.Option
+              key={idx}
+              className={({ active }) =>
+                `relative cursor-default select-none py-2 pl-10 pr-4 ${
+                  active ? 'bg-blue-100 text-blue-900' : 'text-gray-900'
+                }`
+              }
+              value={universidad}
+            >
+              {({ selected, active }) => (
+                <>
+                  <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
+                    {universidad}
+                  </span>
+                  {selected && (
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-blue-600">
+                      <CheckIcon className="h-5 w-5" aria-hidden="true" />
+                    </span>
                   )}
-                </div>
-                <div className="mb-3">
-                  <label className="form-label">Título profesional</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    name="titulo"
-                    required
-                    onChange={handleChange}
-                    onBlur={handleBlur}
-                    value={form.titulo || ""}
-                  />
-                  {(submitted || touched.titulo) && isRequiredEmpty("titulo") && (
-                    <div className="text-danger mt-1" style={{ fontSize: "0.9em" }}>
-                      Este campo es obligatorio
-                    </div>
-                  )}
-                </div>
-                <div className="mb-3">
-                  <label className="form-label">Ciudad</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    name="ciudad"
-                    required
-                    onChange={handleChange}
-                    onBlur={handleBlur}
-                    value={form.ciudad || ""}
-                  />
-                  {(submitted || touched.ciudad) && isRequiredEmpty("ciudad") && (
-                    <div className="text-danger mt-1" style={{ fontSize: "0.9em" }}>
-                      Este campo es obligatorio
-                    </div>
-                  )}
-                </div>
-                <div className="mb-3">
-                  <label className="form-label">Comuna</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    name="comuna"
-                    required
-                    onChange={handleChange}
-                    onBlur={handleBlur}
-                    value={form.comuna || ""}
-                  />
-                  {(submitted || touched.comuna) && isRequiredEmpty("comuna") && (
-                    <div className="text-danger mt-1" style={{ fontSize: "0.9em" }}>
-                      Este campo es obligatorio
-                    </div>
-                  )}
-                </div>
-                <div className="mb-3">
-                  <label className="form-label">Foto (URL o archivo)</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    name="foto"
-                    placeholder="URL o archivo (pronto)"
-                    onChange={handleChange}
-                    onBlur={handleBlur}
-                    value={form.foto || ""}
-                  />
-                  {(submitted || touched.foto) && isRequiredEmpty("foto") && (
-                    <div className="text-danger mt-1" style={{ fontSize: "0.9em" }}>
-                      Este campo es obligatorio
-                    </div>
-                  )}
-                </div>
-                <div className="mb-3">
-                  <label className="form-label">Descripción breve</label>
-                  <textarea
-                    className="form-control"
-                    name="descripcion"
-                    rows={2}
-                    required
-                    onChange={handleChange}
-                    onBlur={handleBlur}
-                    value={form.descripcion || ""}
-                  />
-                  {(submitted || touched.descripcion) && isRequiredEmpty("descripcion") && (
-                    <div className="text-danger mt-1" style={{ fontSize: "0.9em" }}>
-                      Este campo es obligatorio
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
+                </>
+              )}
+            </Combobox.Option>
+          ))}
+        </Combobox.Options>
+      </Combobox>
+    </div>
+  );
 
-            {/* Correo */}
-            <div className="mb-3">
-              <label className="form-label">Correo electrónico</label>
-              <input
-                type="email"
-                className="form-control"
-                name="correo"
-                required
-                onChange={handleChange}
-                onBlur={handleBlur}
-                value={form.correo || ""}
-              />
-              {(submitted || touched.correo) && isRequiredEmpty("correo") && (
-                <div className="text-danger mt-1" style={{ fontSize: "0.9em" }}>
-                  Este campo es obligatorio
-                </div>
-              )}
-            </div>
-            {/* Contraseña */}
-            <div className="mb-3">
-              <label className="form-label">Contraseña</label>
-              <input
-                type="password"
-                className="form-control"
-                name="password1"
-                required
-                onChange={handleChange}
-                onBlur={handleBlur}
-                value={form.password1 || ""}
-              />
-              {(submitted || touched.password1) && isRequiredEmpty("password1") && (
-                <div className="text-danger mt-1" style={{ fontSize: "0.9em" }}>
-                  Este campo es obligatorio
-                </div>
-              )}
-            </div>
-            {/* Repite contraseña */}
-            <div className="mb-4">
-              <label className="form-label">Repite la contraseña</label>
-              <input
-                type="password"
-                className="form-control"
-                name="password2"
-                required
-                onChange={handleChange}
-                onBlur={handleBlur}
-                value={form.password2 || ""}
-              />
-              {(submitted || touched.password2) && isRequiredEmpty("password2") && (
-                <div className="text-danger mt-1" style={{ fontSize: "0.9em" }}>
-                  Este campo es obligatorio
-                </div>
-              )}
-              {(submitted || touched.password2) && form.password1 && form.password2 && form.password1 !== form.password2 && (
-                <div className="text-danger mt-1" style={{ fontSize: "0.9em" }}>
-                  Las contraseñas no coinciden
-                </div>
-              )}
-            </div>
-
-            {/* Opciones de pago SOLO para psicólogos */}
-            {tipo === "psicologo" ? (
-              <>
-                <div className="alert alert-info">
-                  <strong>¡Atención!</strong> Para activar tu perfil deberás realizar el pago de suscripción.
-                </div>
-                <button className="btn btn-primary w-100" type="submit" disabled={loading}>
-                  {loading ? "Registrando..." : "Pagar Ahora"}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary btn-sm w-100 mt-3"
-                  onClick={handleRegisterWithoutPay}
-                  disabled={loading}
-                >
-                  Registrarme sin pagar
-                </button>
-              </>
-            ) : (
-              <button className="btn btn-primary w-100" type="submit" disabled={loading}>
-                {loading ? "Registrando..." : "Registrarme"}
-              </button>
-            )}
-
-            <div className="text-center mt-3">
-              <button type="button" className="btn btn-link text-secondary" onClick={() => setTipo("")}>
-                ← Volver
-              </button>
-            </div>
-            {/* Mensaje de feedback */}
-            {mensaje && (
-              <div className={`alert mt-4 ${mensaje.startsWith("¡Registro exitoso") ? "alert-success" : "alert-danger"}`}>
-                {mensaje}
-              </div>
-            )}
-          </form>
-        )}
+  if (loadingData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
+        <div className="bg-white p-8 rounded-lg shadow-lg">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 text-center">Cargando datos...</p>
+        </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center p-4">
+      <form onSubmit={handleSubmit} className="bg-white shadow-lg rounded-3xl p-8 w-full max-w-2xl space-y-4">
+        <h2 className="text-3xl font-bold text-blue-700 text-center mb-6">Registro Psicólogos</h2>
+
+        {/* Información personal */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Nombre</label>
+            <input 
+              name="nombre" 
+              placeholder="Ingresa tu nombre" 
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={e => setForm({ ...form, nombre: e.target.value })} 
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Apellido</label>
+            <input 
+              name="apellido" 
+              placeholder="Ingresa tu apellido" 
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={e => setForm({ ...form, apellido: e.target.value })} 
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Correo electrónico</label>
+          <input 
+            type="email" 
+            name="correo" 
+            placeholder="tu@email.com" 
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            onChange={e => setForm({ ...form, correo: e.target.value })} 
+          />
+        </div>
+
+        {/* Información académica */}
+        <UniversidadCombobox />
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Título Profesional</label>
+          <input 
+            name="titulo" 
+            placeholder="Ej: Psicólogo, Magíster en Psicología Clínica" 
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            onChange={e => setForm({ ...form, titulo: e.target.value })} 
+          />
+        </div>
+
+        {/* Ubicación */}
+        <CustomListbox
+          label="Ciudad"
+          value={ciudadSeleccionada}
+          onChange={handleCiudadChange}
+          options={ciudades}
+          placeholder="Selecciona tu ciudad"
+        />
+
+        <CustomListbox
+          label="Comuna"
+          value={form.comuna}
+          onChange={val => setForm({ ...form, comuna: val })}
+          options={comunasFiltradas.map(c => c.nombre)}
+          disabled={!ciudadSeleccionada}
+          placeholder={!ciudadSeleccionada ? "Primero selecciona una ciudad" : "Selecciona tu comuna"}
+        />
+
+        {/* Información adicional */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">URL de Foto de Perfil</label>
+          <input 
+            name="foto" 
+            placeholder="https://ejemplo.com/mi-foto.jpg" 
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            onChange={e => setForm({ ...form, foto: e.target.value })} 
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Descripción Profesional</label>
+          <textarea 
+            name="descripcion" 
+            placeholder="Describe tu experiencia, especialidades y enfoque terapéutico..." 
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            rows={4}
+            onChange={e => setForm({ ...form, descripcion: e.target.value })} 
+          />
+        </div>
+
+        {/* Contraseñas */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Contraseña</label>
+            <input 
+              name="password1" 
+              placeholder="Mínimo 8 caracteres" 
+              type="password" 
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={e => setForm({ ...form, password1: e.target.value })} 
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Confirmar Contraseña</label>
+            <input 
+              name="password2" 
+              placeholder="Repite tu contraseña" 
+              type="password" 
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={e => setForm({ ...form, password2: e.target.value })} 
+            />
+          </div>
+        </div>
+
+        {/* Validación de contraseñas */}
+        {form.password1 && form.password2 && form.password1 !== form.password2 && (
+          <div className="text-red-600 text-sm">Las contraseñas no coinciden</div>
+        )}
+
+        <div className="bg-blue-50 p-4 rounded-lg">
+          <p className="text-sm text-blue-800">
+            💡 Para activar tu perfil y comenzar a recibir pacientes, deberás completar el proceso de suscripción.
+          </p>
+        </div>
+
+        {/* Botones */}
+        <div className="space-y-3">
+          <button 
+            type="submit" 
+            disabled={!isFormValid || loading} 
+            className="w-full bg-blue-600 text-white py-3 px-6 rounded-xl shadow-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+          >
+            {loading ? (
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                Registrando...
+              </div>
+            ) : "Pagar y Activar Perfil"}
+          </button>
+
+          <button 
+            type="button" 
+            onClick={handleRegisterWithoutPay} 
+            disabled={!isFormValid || loading} 
+            className="w-full border-2 border-blue-600 text-blue-600 py-3 px-6 rounded-xl shadow hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+          >
+            Registrarme sin pagar (perfil inactivo)
+          </button>
+        </div>
+
+        {mensaje && (
+          <div className={`p-4 rounded-lg text-center font-medium ${
+            mensaje.includes("exitoso") 
+              ? "bg-green-100 text-green-800 border border-green-200" 
+              : "bg-red-100 text-red-800 border border-red-200"
+          }`}>
+            {mensaje}
+          </div>
+        )}
+      </form>
     </div>
   );
 }
