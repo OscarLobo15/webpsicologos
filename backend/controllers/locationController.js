@@ -2,11 +2,16 @@ const supabase = require('../utils/supabaseClient');
 
 exports.getComunas = async (req, res, next) => {
   try {
-    const { data, error } = await supabase.from('localizacion').select('comuna').order('comuna', { ascending: true });
+    const { data, error } = await supabase
+      .from('localizacion')
+      .select('ciudad, comuna')
+      .order('ciudad', { ascending: true });
+
     if (error) throw error;
-    const comunasUnicas = [...new Set(data.map(c => c.comuna))];
-    res.json(comunasUnicas);
-  } catch (err) { next(err); }
+    res.json(data); // En formato correcto para el frontend
+  } catch (err) {
+    next(err);
+  }
 };
 
 exports.getUniversidades = async (req, res, next) => {

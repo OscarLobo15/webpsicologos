@@ -5,6 +5,7 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import dayjs from "dayjs";
 import toast, { Toaster } from "react-hot-toast";
+import HeaderDashboard from "../Components/HeaderDashboard";
 
 export default function DashboardPs() {
   const navigate = useNavigate();
@@ -142,8 +143,8 @@ export default function DashboardPs() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 px-6 py-8">
-      <h2 className="text-3xl font-bold text-blue-800 mb-6">Bienvenido, {user?.nombre}</h2>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 px-6 py-8 pt-28">
+      <HeaderDashboard nombre={user?.nombre} />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <SummaryCard title="Sesiones esta semana" value={citasSemana} />

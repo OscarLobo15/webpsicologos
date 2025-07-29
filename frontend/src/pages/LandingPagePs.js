@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import Header from './Header';
-import Footer from './Footer';
+import Header from '../Components/Header';
+import Footer from '../Components/Footer';
 
 const testimonios = [
   { nombre: "María P.", texto: "Encontré a mi psicóloga ideal en minutos. El sitio es hermoso, rápido y seguro." },

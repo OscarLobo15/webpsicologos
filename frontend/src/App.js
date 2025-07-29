@@ -1,17 +1,18 @@
 // src/App.js
 import React from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import LandingPage from "./components/LandingPagePs";
-import Register from "./components/Register";
-import Login from "./components/LogIn";
-import Search from "./components/Search";
-import Profile from "./components/Profile";
-import PsDetails from "./components/PsDetails";
-import UpdateData from "./components/UpdateData";
-import ProtectedRoute from "./components/ProtectedRoute";
-import DashboardPs from "./components/DashboardPs";
-import ReservarHora from "./components/ReservarHora";
-import PsychologistLandingPage from "./components/PsychologistLandingPage";
+import LandingPage from "./pages/LandingPagePs";
+import Register from "./auth/Register";
+import Login from "./auth/Login";
+import Search from "./pages/Search";
+import Profile from "./pages/Profile";
+import PsDetails from "./pages/PsDetails";
+import UpdateData from "./pages/UpdateData";
+import PrivateRoute from "./auth/PrivateRoute";
+import DashboardPs from "./pages/DashboardPs";
+import ReservarHora from "./pages/ReservarHora";
+import PsychologistLandingPage from "./pages/PsychologistLandingPage";
+
 
 function App() {
   return (
@@ -30,25 +31,25 @@ function App() {
         <Route
           path="/profile"
           element={
-            <ProtectedRoute>
+            <PrivateRoute>
               <Profile />
-            </ProtectedRoute>
+            </PrivateRoute>
           }
         />
         <Route
           path="/update"
           element={
-            <ProtectedRoute>
+            <PrivateRoute>
               <UpdateData />
-            </ProtectedRoute>
+            </PrivateRoute>
           }
         />
         <Route
           path="/dashboard-psicologo"
           element={
-            <ProtectedRoute>
+            <PrivateRoute>
               <DashboardPs />
-            </ProtectedRoute>
+            </PrivateRoute>
           }
         />
       </Routes>

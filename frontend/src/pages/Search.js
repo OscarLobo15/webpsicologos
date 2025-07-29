@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Header from "./Header";
-import Footer from "./Footer";
+import Header from "../Components/Header";
+import Footer from "../Components/Footer";
 
 export default function Search() {
   const navigate = useNavigate();
@@ -19,7 +19,9 @@ export default function Search() {
 
   const [opciones, setOpciones] = useState({
     universidades: [],
-    comunas: [],
+    ciudades: [],
+    comunasRaw: [],
+    comunasFiltradas: [],
   });
 
   // Debounce búsqueda
@@ -36,14 +38,33 @@ export default function Search() {
           fetch("http://localhost:5000/api/location/comunas")
         ]);
         const universidades = await univRes.json();
-        const comunas = await comRes.json();
-        setOpciones({ universidades, comunas });
+        const comunasRaw = await comRes.json();
+
+        const ciudades = [...new Set(comunasRaw.map(c => c.ciudad))];
+
+        setOpciones({
+          universidades,
+          ciudades,
+          comunasRaw,
+          comunasFiltradas: [],
+        });
       } catch (e) {
         console.error("Error cargando opciones:", e);
       }
     };
     fetchOpciones();
   }, []);
+
+  useEffect(() => {
+    if (filtros.ciudad) {
+      const filtradas = opciones.comunasRaw
+        .filter(c => c.ciudad === filtros.ciudad)
+        .map(c => c.comuna);
+      setOpciones(prev => ({ ...prev, comunasFiltradas: filtradas }));
+    } else {
+      setOpciones(prev => ({ ...prev, comunasFiltradas: [] }));
+    }
+  }, [filtros.ciudad, opciones.comunasRaw]);
 
   useEffect(() => {
     const getPsicologos = async () => {
@@ -79,7 +100,6 @@ export default function Search() {
       <Header />
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 p-8 pt-24">
         <div className="max-w-6xl mx-auto bg-white rounded-3xl shadow-2xl p-8 flex flex-col md:flex-row">
-          
           {/* Filtros */}
           <div className="w-full md:w-1/4 pr-0 md:pr-8 mb-8 md:mb-0">
             <h3 className="text-2xl font-bold text-blue-800 mb-6">Filtros</h3>
@@ -98,10 +118,18 @@ export default function Search() {
               {opciones.universidades.map((u) => <option key={u} value={u}>{u}</option>)}
             </select>
 
-            <label className="block mb-1 font-semibold text-gray-700">Comuna</label>
-            <select name="comuna" value={filtros.comuna} onChange={handleFiltro} className="w-full p-2 mb-4 border border-blue-200 rounded-lg">
+            <label className="block mb-1 font-semibold text-gray-700">Ciudad</label>
+            <select name="ciudad" value={filtros.ciudad} onChange={handleFiltro} className="w-full p-2 mb-4 border border-blue-200 rounded-lg">
               <option value="">Todas</option>
-              {opciones.comunas.map((c) => <option key={c} value={c}>{c}</option>)}
+              {opciones.ciudades.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+
+            <label className="block mb-1 font-semibold text-gray-700">Comuna</label>
+            <select name="comuna" value={filtros.comuna} onChange={handleFiltro} className="w-full p-2 mb-4 border border-blue-200 rounded-lg" disabled={!filtros.ciudad}>
+              <option value="">Todas</option>
+              {opciones.comunasFiltradas.map((comuna) => (
+                <option key={comuna} value={comuna}>{comuna}</option>
+              ))}
             </select>
           </div>
 
