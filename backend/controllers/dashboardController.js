@@ -13,7 +13,7 @@ exports.getDashboardInfo = async (req, res, next) => {
     // Pacientes nuevos (últimos 30 días)
     const { count: pacientesNuevos } = await supabase
       .from('reservas')
-      .select('cliente_id', { count: 'exact', head: true })
+      .select('email_paciente', { count: 'exact', head: true })
       .eq('psicologo_id', psicologo_id)
       .gte('fecha', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
 
@@ -28,20 +28,37 @@ exports.getDashboardInfo = async (req, res, next) => {
     const gananciaTeorica = (sesionesMes || 0) * 20000;
     const gananciaAjustada = gananciaTeorica * 0.9;
 
-    // Próximas citas
-    const { data: proximasCitas } = await supabase
+    // Fecha y hora actual
+    const fechaActual = new Date();
+    const fechaHoy = fechaActual.toISOString().slice(0, 10);
+    const horaActual = fechaActual.toTimeString().slice(0, 5);
+    
+    // Próximas citas (solo citas futuras considerando fecha y hora)
+    const { data: todasCitas } = await supabase
       .from('reservas')
-      .select('fecha, modalidad, estado, perfiles_clientes(nombre, apellido)')
+      .select('*')
       .eq('psicologo_id', psicologo_id)
-      .gte('fecha', new Date().toISOString().slice(0, 10))
+      .gte('fecha', fechaHoy)
       .order('fecha', { ascending: true })
-      .limit(5);
+      .order('hora', { ascending: true });
+      
+    // Filtrar citas para excluir las que ya pasaron hoy
+    const proximasCitas = (todasCitas || []).filter(cita => {
+      // Si es una fecha futura, incluirla
+      if (cita.fecha > fechaHoy) return true;
+      // Si es hoy, verificar que la hora sea futura
+      return cita.fecha === fechaHoy && cita.hora >= horaActual;
+    }).slice(0, 5); // Limitar a 5 citas
 
     const citas = (proximasCitas || []).map(cita => ({
-      nombre_paciente: cita.perfiles_clientes ? `${cita.perfiles_clientes.nombre} ${cita.perfiles_clientes.apellido}` : '',
-      modalidad: cita.modalidad,
-      fecha: cita.fecha,
-      estado: cita.estado
+      nombre_paciente: cita.nombre_paciente || 'Sin nombre',
+      edad: cita.edad || null,
+      modalidad: cita.modalidad || 'Presencial',
+      fecha: `${cita.fecha}T${cita.hora}`,
+      estado: cita.estado || 'Confirmada',
+      email_paciente: cita.email_paciente,
+      telefono: cita.telefono,
+      motivo: cita.motivo
     }));
 
     res.json({

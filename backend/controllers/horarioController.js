@@ -7,8 +7,31 @@ exports.getDisponibilidadPublica = async (req, res, next) => {
       .select('*')
       .eq('psicologo_id', psicologo_id)
       .eq('disponible', true);
+    
     if (error) throw error;
-    res.json({ success: true, bloques });
+    
+    // Filtrar bloques para el día de hoy que tienen menos de 4 horas de anticipación
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0]; // Formato YYYY-MM-DD
+    
+    const bloquesFiltrados = bloques.filter(bloque => {
+      // Si no es el día de hoy, mantener el bloque
+      if (bloque.fecha !== todayStr) return true;
+      
+      // Si es el día de hoy, verificar que tenga al menos 4 horas de anticipación
+      const [horaStr, minutosStr] = bloque.hora.split(':');
+      const horaBloque = new Date();
+      horaBloque.setHours(parseInt(horaStr, 10), parseInt(minutosStr, 10), 0, 0);
+      
+      // Calcular la diferencia en milisegundos y convertirla a horas
+      const diferenciaMilis = horaBloque - today;
+      const diferenciaHoras = diferenciaMilis / (1000 * 60 * 60);
+      
+      // Mantener el bloque solo si tiene al menos 4 horas de anticipación
+      return diferenciaHoras >= 4;
+    });
+    
+    res.json({ success: true, bloques: bloquesFiltrados });
   } catch (err) {
     next(err);
   }
@@ -25,25 +48,54 @@ exports.getHorarios = async (req, res, next) => {
       .eq('psicologo_id', psicologo_id);
     if (error) throw error;
 
-    // Para cada bloque reservado, buscar la reserva y el paciente
+    // Para cada bloque, determinar su estado: disponible, reservado o bloqueado
     const bloquesConReserva = await Promise.all(
       bloques.map(async (bloque) => {
-        if (!bloque.disponible) {
-          // Buscar la reserva asociada
-          const { data: reserva } = await supabase
-            .from('reservas')
-            .select('id, cliente_id, modalidad, perfiles_clientes(nombre, apellido)')
-            .eq('horario_id', bloque.id)
-            .maybeSingle();
-          if (reserva && reserva.perfiles_clientes) {
-            return {
-              ...bloque,
-              paciente_nombre: reserva.perfiles_clientes.nombre + ' ' + reserva.perfiles_clientes.apellido,
-              modalidad: reserva.modalidad || '',
-            };
-          }
+        // Primero verificamos si el bloque está disponible (verde)
+        if (bloque.disponible) {
+          return {
+            ...bloque,
+            bloqueado: false,
+            esReserva: false,
+            tipo: 'disponible'
+          };
         }
-        return bloque;
+        
+        // Si el bloque no está disponible, verificamos si tiene una reserva asociada
+        const { data: reserva, error: errorReserva } = await supabase
+          .from('reservas')
+          .select('id, modalidad, nombre_paciente, email_paciente, telefono, edad, motivo, rut')
+          .eq('horario_id', bloque.id)
+          .maybeSingle();
+        
+        if (errorReserva) {
+          // Error silencioso
+        }
+        
+        // Si tiene una reserva, es un bloque reservado (azul)
+        if (reserva) {
+          return {
+            ...bloque,
+            paciente_nombre: reserva.nombre_paciente || 'Paciente',
+            email_paciente: reserva.email_paciente,
+            telefono: reserva.telefono,
+            edad: reserva.edad,
+            modalidad: reserva.modalidad || '',
+            motivo: reserva.motivo,
+            rut: reserva.rut,
+            bloqueado: false,
+            esReserva: true,
+            tipo: 'reservado'
+          };
+        }
+        
+        // Si no está disponible y no tiene reserva, es un bloque bloqueado por el psicólogo (rojo)
+        return {
+          ...bloque,
+          bloqueado: true,
+          esReserva: false,
+          tipo: 'bloqueado'
+        };
       })
     );
     res.json({ success: true, data: bloquesConReserva });
