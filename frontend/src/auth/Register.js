@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../utils/supabaseClient";
+import { subirFotoPerfil } from "../api/subirFotoPerfil";
 
 export default function Register() {
   const navigate = useNavigate();
   const [form, setForm] = useState({});
+  const [fotoFile, setFotoFile] = useState(null);
   const [universidades, setUniversidades] = useState([]);
   const [ciudades, setCiudades] = useState([]);
   const [comunasRaw, setComunasRaw] = useState([]);
@@ -43,8 +45,17 @@ export default function Register() {
     e.preventDefault();
     setMensaje("");
 
+    let fotoUrl = "";
+    if (fotoFile) {
+      setMensaje("Subiendo foto...");
+      fotoUrl = await subirFotoPerfil(fotoFile, form.correo || Date.now());
+      if (!fotoUrl) {
+        setMensaje("No se pudo subir la foto de perfil.");
+        return;
+      }
+    }
+
     try {
-      // ✅ RUTA CORREGIDA
       const response = await fetch("http://localhost:5000/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -57,7 +68,7 @@ export default function Register() {
           universidad: form.universidad,
           titulo: form.titulo,
           descripcion: form.descripcion,
-          foto_url: form.foto,
+          foto_path: fotoUrl,
           ciudad: form.ciudad,
           comuna: form.comuna
         })
@@ -66,17 +77,6 @@ export default function Register() {
       const result = await response.json();
       if (!result.success) {
         setMensaje(result.error);
-        return;
-      }
-
-      // Iniciar sesión con Supabase Auth
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: form.correo,
-        password: form.password
-      });
-
-      if (authError) {
-        setMensaje("Cuenta creada, pero no se pudo iniciar sesión automáticamente.");
         return;
       }
 
@@ -94,7 +94,8 @@ export default function Register() {
       <input placeholder="Correo" type="email" onChange={(e) => setForm({ ...form, correo: e.target.value })} className="mb-3 w-full border p-2" />
       <input placeholder="Contraseña" type="password" onChange={(e) => setForm({ ...form, password: e.target.value })} className="mb-3 w-full border p-2" />
       <input placeholder="Título" onChange={(e) => setForm({ ...form, titulo: e.target.value })} className="mb-3 w-full border p-2" />
-      <input placeholder="Foto URL" onChange={(e) => setForm({ ...form, foto: e.target.value })} className="mb-3 w-full border p-2" />
+      <label className="block mb-2">Foto de perfil</label>
+      <input type="file" accept="image/*" onChange={e => setFotoFile(e.target.files[0])} className="mb-3 w-full border p-2" />
       <textarea placeholder="Descripción" onChange={(e) => setForm({ ...form, descripcion: e.target.value })} className="mb-3 w-full border p-2" />
 
       <select onChange={(e) => setForm({ ...form, universidad: e.target.value })} className="mb-3 w-full border p-2">

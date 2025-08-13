@@ -144,9 +144,13 @@ export default function Search() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 {psicologosFiltrados.map((p) => (
-                  <div key={p.usuario_id} className="bg-blue-50 p-6 rounded-2xl shadow-md hover:shadow-lg transition-all transform hover:-translate-y-1 cursor-pointer border border-blue-100">
+                  <div
+                    key={p.usuario_id}
+                    className="bg-blue-50 p-6 rounded-2xl shadow-md hover:shadow-lg transition-all transform hover:-translate-y-1 cursor-pointer border border-blue-100"
+                    onClick={() => navigate(`/psychologist/${p.usuario_id}`)}
+                  >
                     <div className="flex items-center mb-4">
-                      <img src={p.foto_url || 'https://via.placeholder.com/100'} alt="Perfil" className="w-20 h-20 rounded-full object-cover border-4 border-blue-300 shadow-md" />
+                      <img src={p.foto_path || 'https://via.placeholder.com/100'} alt="Perfil" className="w-20 h-20 rounded-full object-cover border-4 border-blue-300 shadow-md" />
                       <div className="ml-4">
                         <h3 className="text-xl font-bold text-blue-700">{p.nombre} {p.apellido}</h3>
                         <p className="text-blue-500 text-sm">{p.especialidad || 'Psicólogo(a)'}</p>
@@ -156,8 +160,14 @@ export default function Search() {
                     <p className="text-gray-600 text-sm mb-2"><span className="font-semibold">Ubicación:</span> {p.ciudad}, {p.comuna}</p>
                     <p className="text-gray-600 text-sm mb-3">{p.descripcion || 'Especialista en salud mental.'}</p>
                     <div className="flex gap-2">
-                      <button onClick={() => navigate(`/psychologist/${p.usuario_id}`)} className="flex-1 bg-blue-600 text-white py-2 rounded-xl hover:bg-blue-700">Ver Perfil</button>
-                      <button onClick={() => navigate(`/reservar/${p.usuario_id}`)} className="flex-1 bg-white border border-blue-600 text-blue-600 py-2 rounded-xl hover:bg-blue-50">Reservar</button>
+                      <button
+                        onClick={e => { e.stopPropagation(); navigate(`/psychologist/${p.usuario_id}`); }}
+                        className="flex-1 bg-blue-600 text-white py-2 rounded-xl hover:bg-blue-700"
+                      >Ver Perfil</button>
+                      <button
+                        onClick={e => { e.stopPropagation(); navigate(`/reservar/${p.usuario_id}`); }}
+                        className="flex-1 bg-white border border-blue-600 text-blue-600 py-2 rounded-xl hover:bg-blue-50"
+                      >Reservar</button>
                     </div>
                   </div>
                 ))}

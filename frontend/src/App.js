@@ -8,11 +8,10 @@ import Search from "./pages/Search";
 import Profile from "./pages/Profile";
 import PsDetails from "./pages/PsDetails";
 import UpdateData from "./pages/UpdateData";
-import PrivateRoute from "./auth/PrivateRoute";
 import DashboardPs from "./pages/DashboardPs";
 import ReservarHora from "./pages/ReservarHora";
 import PsychologistLandingPage from "./pages/PsychologistLandingPage";
-
+import PrivateRoute from "./auth/PrivateRoute";
 
 function App() {
   return (
@@ -47,7 +46,7 @@ function App() {
         <Route
           path="/dashboard-psicologo"
           element={
-            <PrivateRoute>
+            <PrivateRoute allowedRoles={["psicologo"]}>
               <DashboardPs />
             </PrivateRoute>
           }

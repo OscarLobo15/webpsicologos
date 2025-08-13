@@ -1,5 +1,5 @@
 // src/Components/HeaderDashboard.jsx
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { LogOut, User } from "lucide-react";
 import { supabase } from "../utils/supabaseClient";
@@ -47,7 +47,7 @@ export default function HeaderDashboard() {
       </h1>
       <div className="flex items-center gap-4">
         <span className="text-blue-800 font-semibold hidden sm:inline">
-          Bienvenido, {user?.user_metadata?.nombre || user?.email}
+          {"Bienvenido, " + (user?.user_metadata?.full_name || user?.user_metadata?.nombre || user?.email || "Usuario")}
         </span>
         <button
           onClick={() => navigate("/perfil")}

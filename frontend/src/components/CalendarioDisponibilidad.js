@@ -1,30 +1,51 @@
-// src/components/CalendarioDisponibilidad.jsx
-import React from "react";
+import React, { useState } from "react";
+import FullCalendar from "@fullcalendar/react";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import interactionPlugin from "@fullcalendar/interaction";
+import dayjs from "dayjs";
 
-export default function CalendarioDisponibilidad({ fechas, onFechaSeleccionada }) {
+const CalendarioDisponibilidad = ({ eventos, onAgregar, onEliminar }) => {
+  const [calendarEvents, setCalendarEvents] = useState(eventos || []);
+
+  const handleDateSelect = (info) => {
+    const nuevaDisponibilidad = {
+      id: String(new Date().getTime()),
+      title: "Disponibilidad",
+      start: info.startStr,
+      end: info.endStr,
+    };
+
+    setCalendarEvents([...calendarEvents, nuevaDisponibilidad]);
+
+    if (onAgregar) onAgregar(nuevaDisponibilidad);
+  };
+
+  const handleEventClick = (info) => {
+    const confirmacion = window.confirm("¿Eliminar este bloque de disponibilidad?");
+    if (confirmacion) {
+      const filtrados = calendarEvents.filter(e => e.id !== info.event.id);
+      setCalendarEvents(filtrados);
+      if (onEliminar) onEliminar(info.event.id);
+    }
+  };
+
   return (
-    <div>
-      <h4 className="mb-3">Selecciona una fecha disponible</h4>
-      <div className="d-flex flex-wrap gap-3">
-        {fechas.length > 0 ? (
-          fechas.map((fecha, idx) => (
-            <button
-              key={idx}
-              className="btn btn-outline-primary"
-              onClick={() => onFechaSeleccionada(fecha)}
-            >
-              {new Date(fecha).toLocaleDateString("es-CL", {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </button>
-          ))
-        ) : (
-          <p>No hay fechas disponibles por ahora.</p>
-        )}
-      </div>
+    <div className="p-4">
+      <FullCalendar
+        plugins={[timeGridPlugin, interactionPlugin]}
+        initialView="timeGridWeek"
+        selectable={true}
+        editable={false}
+        allDaySlot={false}
+        slotMinTime="08:00:00"
+        slotMaxTime="20:00:00"
+        events={calendarEvents}
+        select={handleDateSelect}
+        eventClick={handleEventClick}
+        height="auto"
+      />
     </div>
   );
-}
+};
+
+export default CalendarioDisponibilidad;

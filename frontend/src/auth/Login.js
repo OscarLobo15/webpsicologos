@@ -17,16 +17,49 @@ export default function Login() {
     setLoading(true);
     setError("");
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    // Validación previa simple
+    if (!form.email || !form.password) {
+      setError("Debes ingresar correo y contraseña.");
+      setLoading(false);
+      return;
+    }
+
+    // 1. Login con Supabase Auth
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
       email: form.email,
       password: form.password,
     });
 
-    if (error) {
+    if (authError) {
       setError("Correo o contraseña incorrectos.");
-    } else {
-      localStorage.setItem("user", JSON.stringify(data.user));
-      navigate("/dashboard-psicologo");
+      setLoading(false);
+      return;
+    }
+
+    // 2. Pedir token propio al backend
+    try {
+      const res = await fetch("http://localhost:5000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: form.email })
+      });
+      const json = await res.json();
+      if (!json.success) {
+        setError(json.error || "No se pudo obtener el token de sesión.");
+        setLoading(false);
+        return;
+      }
+      // Guardar token y usuario
+      localStorage.setItem("token", json.token);
+      localStorage.setItem("user", JSON.stringify(json.user));
+      // Redirección según tipo de usuario
+      if (json.user.tipo_usuario === "psicologo") {
+        navigate("/dashboard-psicologo");
+      } else {
+        navigate("/");
+      }
+    } catch (err) {
+      setError("Error de conexión con el servidor");
     }
     setLoading(false);
   };
@@ -43,6 +76,7 @@ export default function Login() {
             value={form.email}
             onChange={handleChange}
             className="w-full mb-4 p-3 border rounded"
+            required
           />
           <input
             type="password"
@@ -51,6 +85,7 @@ export default function Login() {
             value={form.password}
             onChange={handleChange}
             className="w-full mb-4 p-3 border rounded"
+            required
           />
           {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
           <button

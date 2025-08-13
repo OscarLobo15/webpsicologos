@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import DisponibilidadPsicologo from "../Components/DisponibilidadPsicologo";
 import { useParams, useNavigate } from "react-router-dom";
 import Header from "../Components/Header";
 
@@ -7,6 +8,7 @@ export default function PsDetailsModern() {
   const navigate = useNavigate();
   const [psicologo, setPsicologo] = useState(null);
   const [proximaHora, setProximaHora] = useState(null);
+  const [bloqueSeleccionado, setBloqueSeleccionado] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -24,14 +26,18 @@ export default function PsDetailsModern() {
 
     const getProximaHora = async () => {
       try {
-        const resp = await fetch(`http://localhost:5000/api/horarios/psicologo/${id}`);
+        const resp = await fetch(`http://localhost:5000/api/horarios/${id}/disponibles`);
         const data = await resp.json();
-        if (data.success) {
-          const disponibles = data.data.filter(h => h.disponible);
+        if (data.success && Array.isArray(data.bloques)) {
+          const disponibles = data.bloques;
           if (disponibles.length > 0) {
             disponibles.sort((a, b) => new Date(`${a.fecha}T${a.hora}`) - new Date(`${b.fecha}T${b.hora}`));
             setProximaHora(disponibles[0]);
+          } else {
+            setProximaHora(null);
           }
+        } else {
+          setProximaHora(null);
         }
       } catch {
         setProximaHora(null);
@@ -44,6 +50,12 @@ export default function PsDetailsModern() {
 
   if (loading) return <div className="text-center pt-32 text-gray-600">Cargando psicólogo...</div>;
   if (!psicologo) return <div className="text-center pt-32 text-gray-600">Psicólogo no encontrado</div>;
+
+  // Si el usuario selecciona un bloque, redirigir al formulario de reserva con el bloque
+  if (bloqueSeleccionado) {
+    navigate(`/reservar/${psicologo.usuario_id}?bloqueId=${bloqueSeleccionado.id}`);
+    return null;
+  }
 
   return (
     <>
@@ -62,7 +74,7 @@ export default function PsDetailsModern() {
 
           <div className="flex flex-col md:flex-row items-center md:items-start gap-8 mb-10">
             <img
-              src={psicologo.foto_url || 'https://via.placeholder.com/140'}
+              src={psicologo.foto_path || psicologo.foto_url || 'https://via.placeholder.com/140'}
               alt="Perfil"
               className="w-40 h-40 rounded-full object-cover border-4 border-blue-300 shadow-md"
             />
@@ -72,15 +84,17 @@ export default function PsDetailsModern() {
               <p className="text-gray-700 mb-2">{psicologo.universidad || 'Universidad no disponible'}</p>
 
               <div className="flex items-center justify-between mt-4 flex-wrap md:flex-nowrap gap-3">
-                <p className="text-green-600 font-semibold mb-2 md:mb-0">
-                  {proximaHora ? (
-                    <>🟢 Próxima hora: {new Date(`${proximaHora.fecha}T${proximaHora.hora}`).toLocaleString("es-CL", {
+                {proximaHora ? (
+                  <p className="text-green-600 font-semibold mb-2 md:mb-0">
+                    🟢 Próxima hora disponible: {new Date(`${proximaHora.fecha}T${proximaHora.hora}`).toLocaleString("es-CL", {
                       weekday: "long", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
-                    })}</>
-                  ) : (
-                    <>No hay horas disponibles</>
-                  )}
-                </p>
+                    })}
+                  </p>
+                ) : (
+                  <p className="text-red-600 font-semibold mb-2 md:mb-0">
+                    No hay horas disponibles
+                  </p>
+                )}
 
                 <button
                   onClick={() => navigate(`/reservar/${psicologo.usuario_id}`)}
@@ -92,6 +106,8 @@ export default function PsDetailsModern() {
 
             </div>
           </div>
+
+
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
             <div className="bg-blue-50 p-6 rounded-2xl shadow border border-blue-100">

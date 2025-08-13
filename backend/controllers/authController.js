@@ -7,7 +7,7 @@ exports.register = async (req, res, next) => {
     const {
       email, password, tipo_usuario,
       nombre, apellido,
-      universidad, titulo, foto_url,
+      universidad, titulo, foto_path,
       descripcion, ciudad, comuna
     } = req.body;
 
@@ -25,30 +25,28 @@ exports.register = async (req, res, next) => {
       return res.status(409).json({ success: false, error: "El correo ya está registrado." });
     }
 
-    // Crear usuario en Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+
+    // Crear usuario en Supabase Auth con display_name
+    const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
       email,
       password,
-      email_confirm: true
-    });
-
-    if (authError) {
-      if (authError.message.includes("User already registered")) {
-        return res.status(409).json({ success: false, error: "El correo ya está registrado en Auth." });
+      email_confirm: true,
+      user_metadata: {
+        full_name: nombre + (apellido ? (" " + apellido) : "")
       }
-      return res.status(500).json({ success: false, error: "Error al crear usuario en Auth." });
+    });
+    if (authError) {
+      return res.status(500).json({ success: false, error: 'Error creando usuario en Auth: ' + authError.message });
     }
 
-    const supabase_user_id = authData.user.id;
-
-    // Guardar en tabla usuarios (opcionalmente con hash si quieres usarlo luego)
+    // Hashear password
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Insertar en usuarios
     const { data: inserted, error: insertError } = await supabase
       .from('usuarios')
       .insert([{ email, password: hashedPassword, tipo_usuario }])
       .select();
-
     if (insertError) throw insertError;
 
     const usuario = inserted[0];
@@ -58,8 +56,21 @@ exports.register = async (req, res, next) => {
       await supabase.from('perfiles_psicologos').insert([{
         usuario_id: usuario.id,
         nombre, apellido, universidad, titulo,
-        foto_url, descripcion, ciudad, comuna
+        foto_path, descripcion, ciudad, comuna
       }]);
+      // Crear suscripción inicial sin plan
+      const fechaHoy = new Date().toISOString().slice(0, 10);
+      const { error: suscripcionError } = await supabase.from('suscripciones').insert([
+        {
+          usuario_id: usuario.id,
+          estado: 'sinplan',
+          fecha_inicio: fechaHoy
+        }
+      ]);
+      if (suscripcionError) {
+        console.error('Error al insertar en suscripciones:', suscripcionError);
+        return res.status(500).json({ error: suscripcionError.message || 'Error al crear suscripción' });
+      }
     } else {
       await supabase.from('perfiles_clientes').insert([{ usuario_id: usuario.id, nombre, apellido }]);
     }
@@ -70,31 +81,46 @@ exports.register = async (req, res, next) => {
       { expiresIn: "7d" }
     );
 
-    res.json({ success: true, token, user: { id: usuario.id, email, tipo_usuario } });
+    // Obtener display name desde Auth
+    const displayName = authUser?.user?.user_metadata?.full_name || nombre;
+    res.json({ success: true, token, user: { id: usuario.id, email, tipo_usuario, displayName } });
   } catch (err) {
-    next(err);
+    console.error('Error en registro:', err);
+    if (err && err.message) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: 'Error al registrar usuario' });
+    }
   }
 };
-
 exports.login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
-    if (!email || !password)
-      return res.status(400).json({ success: false, error: "Faltan datos." });
+    const { email } = req.body;
+    if (!email)
+      return res.status(400).json({ success: false, error: "Falta el email." });
 
+    // Buscar usuario en tabla usuarios
     const { data: users } = await supabase
       .from('usuarios')
-      .select('id, email, password, tipo_usuario')
+      .select('id, email, tipo_usuario')
       .eq('email', email);
 
     if (!users || users.length === 0)
-      return res.status(401).json({ success: false, error: "Credenciales inválidas." });
+      return res.status(401).json({ success: false, error: "Usuario no encontrado." });
 
     const user = users[0];
-    const match = await bcrypt.compare(password, user.password);
 
-    if (!match)
-      return res.status(401).json({ success: false, error: "Credenciales inválidas." });
+    // Buscar usuario en Auth para obtener display name
+    let displayName = user.email;
+    try {
+      const { data: authUser, error: authError } = await supabase.auth.admin.getUserByEmail(email);
+      if (authUser && authUser.user && authUser.user.user_metadata && authUser.user.user_metadata.full_name) {
+        displayName = authUser.user.user_metadata.full_name;
+      }
+    } catch (e) {
+      // Si falla, usar email
+      displayName = user.email;
+    }
 
     const token = jwt.sign(
       { id: user.id, email, tipo_usuario: user.tipo_usuario },
@@ -102,7 +128,7 @@ exports.login = async (req, res, next) => {
       { expiresIn: "7d" }
     );
 
-    res.json({ success: true, token, user: { id: user.id, email, tipo_usuario: user.tipo_usuario } });
+    res.json({ success: true, token, user: { id: user.id, email, tipo_usuario: user.tipo_usuario, displayName } });
   } catch (err) {
     next(err);
   }
