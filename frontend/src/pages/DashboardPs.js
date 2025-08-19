@@ -11,6 +11,9 @@ import 'dayjs/locale/es';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import toast, { Toaster } from "react-hot-toast";
 import HeaderDashboard from "../Components/HeaderDashboard";
+import Spinner from "../Components/Spinner";
+import { useDataLoader } from "../utils/dataHooks";
+import StorageService from "../utils/StorageService";
 
 export default function DashboardPs() {
   const navigate = useNavigate();
@@ -20,10 +23,6 @@ export default function DashboardPs() {
   dayjs.locale('es');
   dayjs.extend(relativeTime);
 
-
-
-
-  const [eventos, setEventos] = useState([]);
   const [resumen, setResumen] = useState({
     citasSemana: 0,
     pacientesNuevos: 0,
@@ -96,103 +95,132 @@ export default function DashboardPs() {
   };
 
 
-  // Función para obtener y mapear eventos del calendario
-  const obtenerEventos = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      // Añadir un parámetro de caché para evitar problemas con caché del navegador
-      const timestamp = new Date().getTime();
-      const res = await fetch(`http://localhost:5000/api/horarios/${user.id}?t=${timestamp}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const json = await res.json();
-      if (json.success) {
-        if (!json.data || json.data.length === 0) {
-          setEventos([]);
-          toast("No hay bloques de disponibilidad", { icon: "ℹ️" });
-          return;
-        }
-        const eventos = json.data.map(ev => {
-          
-          const horaLimpia = ev.hora ? ev.hora.slice(0, 5) : "00:00";
-          const horaFin = ev.hora_fin ? ev.hora_fin : dayjs(`${ev.fecha}T${horaLimpia}`).add(1, "hour").format("HH:mm");
-          let title = "";
-          let bg = "";
-          let border = "";
-          let textColor = "";
-          
-          // Determinar el tipo de bloque basado en la lógica:
-          // 1. Si disponible=true -> verde (disponible)
-          // 2. Si disponible=false y hay reserva -> azul (reservado)
-          // 3. Si disponible=false y no hay reserva -> rojo (bloqueado)
-          const tipo = ev.tipo || (ev.disponible ? 'disponible' : ev.bloqueado ? 'bloqueado' : 'reservado');
-          
-          if (ev.disponible) {
-            // Bloque disponible (verde)
-            title = `🟢 Disponible`;
-            bg = "#e0fce0";
-            border = "#22c55e";
-            textColor = "#166534";
-          } else if (ev.bloqueado || tipo === 'bloqueado') {
-            // Bloque bloqueado por el psicólogo (rojo)
-            title = `🔴 Bloqueado`;
-            bg = "#fee2e2"; // Fondo rojo claro
-            border = "#ef4444"; // Borde rojo
-            textColor = "#b91c1c"; // Texto rojo oscuro
-          } else {
-            // Bloque reservado por un paciente (azul)
-            title = `🔵 ${ev.paciente_nombre || "Reservado"}${ev.modalidad ? ` (${ev.modalidad})` : ""}`;
-            bg = "#e0e7ff";
-            border = "#3b82f6";
-            textColor = "#1e40af";
-          }
-          
-          return {
-            id: ev.id,
-            title,
-            start: `${ev.fecha}T${horaLimpia}`,
-            end: `${ev.fecha}T${horaFin}`,
-            backgroundColor: bg,
-            borderColor: border,
-            textColor: textColor,
-            editable: ev.disponible,
-            extendedProps: { 
-              disponible: ev.disponible, 
-              bloqueado: ev.bloqueado || false,
-              paciente: ev.paciente_nombre, 
-              modalidad: ev.modalidad 
-            }
-          };
-        });
-        setEventos(eventos);
+  // Función para obtener eventos del calendario desde el API
+  const fetchEventos = async () => {
+    const token = localStorage.getItem("token");
+    // Añadir un parámetro de caché para evitar problemas con caché del navegador
+    const timestamp = new Date().getTime();
+    const res = await fetch(`http://localhost:5000/api/horarios/${user.id}?t=${timestamp}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const json = await res.json();
+    
+    if (!json.success) {
+      throw new Error(json.message || "Error al cargar los eventos");
+    }
+    
+    return json.data || [];
+  };
+  
+  // Transformar los datos crudos en eventos para el calendario
+  const transformEventos = (data) => {
+    if (!data || data.length === 0) {
+      return [];
+    }
+    
+    return data.map(ev => {
+      const horaLimpia = ev.hora ? ev.hora.slice(0, 5) : "00:00";
+      const horaFin = ev.hora_fin ? ev.hora_fin : dayjs(`${ev.fecha}T${horaLimpia}`).add(1, "hour").format("HH:mm");
+      let title = "";
+      let bg = "";
+      let border = "";
+      let textColor = "";
+      
+      // Determinar el tipo de bloque basado en la lógica:
+      // 1. Si disponible=true -> verde (disponible)
+      // 2. Si disponible=false y hay reserva -> azul (reservado)
+      // 3. Si disponible=false y no hay reserva -> rojo (bloqueado)
+      const tipo = ev.tipo || (ev.disponible ? 'disponible' : ev.bloqueado ? 'bloqueado' : 'reservado');
+      
+      if (ev.disponible) {
+        // Bloque disponible (verde)
+        title = `🟢 Disponible`;
+        bg = "#e0fce0";
+        border = "#22c55e";
+        textColor = "#166534";
+      } else if (ev.bloqueado || tipo === 'bloqueado') {
+        // Bloque bloqueado por el psicólogo (rojo)
+        title = `🔴 Bloqueado`;
+        bg = "#fee2e2"; // Fondo rojo claro
+        border = "#ef4444"; // Borde rojo
+        textColor = "#b91c1c"; // Texto rojo oscuro
       } else {
-        setEventos([]);
-        toast.error(json.message || "No se pudieron cargar los bloques");
+        // Bloque reservado por un paciente (azul)
+        title = `🔵 ${ev.paciente_nombre || "Reservado"}${ev.modalidad ? ` (${ev.modalidad})` : ""}`;
+        bg = "#e0e7ff";
+        border = "#3b82f6";
+        textColor = "#1e40af";
       }
-    } catch (err) {
-      setEventos([]);
-      toast.error("Error cargando eventos");
+      
+      return {
+        id: ev.id,
+        title,
+        start: `${ev.fecha}T${horaLimpia}`,
+        end: `${ev.fecha}T${horaFin}`,
+        backgroundColor: bg,
+        borderColor: border,
+        textColor: textColor,
+        editable: ev.disponible,
+        extendedProps: { 
+          disponible: ev.disponible, 
+          bloqueado: ev.bloqueado || false,
+          paciente: ev.paciente_nombre, 
+          modalidad: ev.modalidad 
+        }
+      };
+    });
+  };
+  
+  // Función para obtener información del dashboard desde el API
+  const fetchResumen = async () => {
+    const token = localStorage.getItem("token");
+    const res = await fetch(`http://localhost:5000/api/dashboard/info/${user.id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const json = await res.json();
+    
+    if (!json.success) {
+      throw new Error(json.message || "Error al cargar el resumen");
     }
+    
+    return json.data;
   };
 
-  const obtenerResumen = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`http://localhost:5000/api/dashboard/info/${user.id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const json = await res.json();
-      if (json.success) setResumen(json.data);
-      else toast.error(json.message || "No se pudo cargar el resumen");
-    } catch {
-      toast.error("Error cargando resumen");
+  // Uso de los hooks personalizados para cargar datos con almacenamiento local
+  const { 
+    data: eventos, 
+    loading: loadingEventos, 
+    error: errorEventos,
+    refresh: refreshEventos 
+  } = useDataLoader(
+    fetchEventos, 
+    `dashboard_eventos_${user.id}`, 
+    { 
+      expirationMinutes: 30, // Caducidad de 30 minutos
+      transform: transformEventos 
     }
-  };
-
+  );
+  
+  const { 
+    data: dashboardData, 
+    loading: loadingResumen,
+    error: errorResumen,
+    refresh: refreshResumen
+  } = useDataLoader(
+    fetchResumen, 
+    `dashboard_resumen_${user.id}`, 
+    { 
+      expirationMinutes: 15, // Caducidad de 15 minutos
+      initialData: resumen 
+    }
+  );
+  
+  // Actualizar el estado de resumen cuando se cargan los datos
   useEffect(() => {
-    obtenerEventos();
-    obtenerResumen();
-  }, []);
+    if (dashboardData) {
+      setResumen(dashboardData);
+    }
+  }, [dashboardData]);
 
   const agregarBloque = async () => {
     if (!nuevoBloque.fecha || !nuevoBloque.hora || !nuevoBloque.hora_fin) return toast.error("Completa fecha, hora inicio y fin");
@@ -217,7 +245,7 @@ export default function DashboardPs() {
       const json = await res.json();
       if (json.success) {
         toast.success("Bloque agregado");
-        obtenerEventos();
+        refreshEventos();
         setModalOpen(false);
         setNuevoBloque({
           fecha: dayjs().format("YYYY-MM-DD"),
@@ -249,13 +277,38 @@ export default function DashboardPs() {
 
       <div className="bg-white p-6 rounded-3xl shadow-lg mb-10">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-blue-800">Bloques de disponibilidad</h2>
-          <button
-            className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 font-semibold shadow transition"
-            onClick={() => setModalOpen(true)}
-          >
-            + Nuevo bloque
-          </button>
+          <h2 className="text-xl font-semibold text-blue-800">
+            Bloques de disponibilidad
+            {loadingEventos && <span className="inline-block ml-2 text-blue-500">⟳</span>}
+            {errorEventos && (
+              <span 
+                className="inline-block ml-2 text-red-500 text-sm cursor-pointer" 
+                onClick={refreshEventos}
+                title="Error al cargar los datos. Haz clic para intentar de nuevo."
+              >
+                Error al cargar datos
+              </span>
+            )}
+          </h2>
+          <div className="flex items-center gap-3">
+            <button
+              className="text-blue-600 hover:bg-blue-50 px-3 py-1 rounded-lg text-sm flex items-center"
+              onClick={refreshEventos}
+              title="Actualizar datos"
+              disabled={loadingEventos}
+            >
+              <svg className={`w-4 h-4 mr-1 ${loadingEventos ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+              </svg>
+              Actualizar
+            </button>
+            <button
+              className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 font-semibold shadow transition"
+              onClick={() => setModalOpen(true)}
+            >
+              + Nuevo bloque
+            </button>
+          </div>
         </div>
         <CalendarModal
           isOpen={modalOpen}
@@ -265,11 +318,14 @@ export default function DashboardPs() {
           setValues={setNuevoBloque}
         />
 
-        <div className="rounded-2xl overflow-hidden border border-blue-200 shadow-sm mt-6">
-          <FullCalendar
-            plugins={[timeGridPlugin, interactionPlugin]}
-            initialView="timeGridWeek"
-            locale="es"
+        {loadingEventos && !eventos?.length ? (
+          <Spinner message="Cargando horarios..." />
+        ) : (
+          <div className="rounded-2xl overflow-hidden border border-blue-200 shadow-sm mt-6">
+            <FullCalendar
+              plugins={[timeGridPlugin, interactionPlugin]}
+              initialView="timeGridWeek"
+              locale="es"
             events={eventos}
             height="auto"
             allDaySlot={false}
@@ -317,7 +373,7 @@ export default function DashboardPs() {
                 const json = await res.json();
                 if (json.success) {
                   toast.success("Bloque actualizado");
-                  obtenerEventos();
+                  refreshEventos();
                 } else {
                   toast.error(json.message);
                   info.revert();
@@ -412,20 +468,24 @@ export default function DashboardPs() {
             }}
           />
         </div>
-
-
+        )}
       </div>
 
       <div className="bg-white p-5 rounded-3xl shadow-lg mb-8">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-blue-800">Próximas Citas</h2>
+          <h2 className="text-lg font-semibold text-blue-800">
+            Próximas Citas
+            {loadingResumen && <span className="inline-block ml-2 text-blue-500">⟳</span>}
+          </h2>
           <div className="flex items-center">
             <div className="w-2 h-2 rounded-full bg-green-500 mr-2"></div>
             <span className="text-xs text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full">Agendado</span>
           </div>
         </div>
         
-        {resumen.proximasCitas && resumen.proximasCitas.length > 0 ? (
+        {loadingResumen && !resumen.proximasCitas?.length ? (
+          <Spinner message="Cargando próximas citas..." />
+        ) : resumen.proximasCitas && resumen.proximasCitas.length > 0 ? (
           <div className="space-y-3">
             {resumen.proximasCitas.map((cita, i) => {
               // Verificar que la cita no haya pasado ya
@@ -561,8 +621,8 @@ export default function DashboardPs() {
                 const json = await res.json();
                 if (json.success) {
                   toast.success("Bloque eliminado correctamente");
-                  obtenerEventos();
-                  obtenerResumen();
+                  refreshEventos();
+                  refreshResumen();
                 } else {
                   toast.error(json.message || "No se pudo eliminar el bloque");
                 }
@@ -579,8 +639,8 @@ export default function DashboardPs() {
                 const json = await res.json();
                 if (json.success) {
                   toast.success("Bloque marcado como bloqueado");
-                  obtenerEventos();
-                  obtenerResumen();
+                  refreshEventos();
+                  refreshResumen();
                 } else {
                   toast.error(json.message || "No se pudo bloquear el horario");
                 }
@@ -597,8 +657,8 @@ export default function DashboardPs() {
                 const json = await res.json();
                 if (json.success) {
                   toast.success("Bloque marcado como disponible");
-                  obtenerEventos();
-                  obtenerResumen();
+                  refreshEventos();
+                  refreshResumen();
                 } else {
                   toast.error(json.message || "No se pudo desbloquear el horario");
                 }
@@ -626,8 +686,8 @@ export default function DashboardPs() {
                   toast.success("Reserva cancelada. El bloque ha sido bloqueado.");
                 }
                 // Recargar datos
-                obtenerEventos();
-                obtenerResumen();
+                refreshEventos();
+                refreshResumen();
               } else {
                 toast.error(json.message || "No se pudo cancelar la reserva");
               }
@@ -638,6 +698,41 @@ export default function DashboardPs() {
           }}
         />
       )}
+      
+      {/* Contenedor para botones */}
+      <div className="bg-white px-6 py-3 rounded-3xl shadow-lg mb-10">
+        {/* Botones de Acción Rápida */}
+        <div className="flex flex-wrap justify-center gap-4">
+          <button
+            onClick={() => setModalOpen(true)}
+            className="bg-blue-600 text-white px-6 py-3 rounded-xl shadow-lg hover:bg-blue-700 transition-colors flex items-center"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            Nueva Reserva
+          </button>
+          <button
+            onClick={() => navigate('/profile')}
+            className="bg-blue-600 text-white px-6 py-3 rounded-xl shadow-lg hover:bg-blue-700 transition-colors flex items-center"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Mi Perfil
+          </button>
+          <button
+            onClick={() => toast.info("Funcionalidad de generar informe en desarrollo")}
+            className="bg-blue-600 text-white px-6 py-3 rounded-xl shadow-lg hover:bg-blue-700 transition-colors flex items-center"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 2v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Generar Informe
+          </button>
+        </div>
+      </div>
       
       <Toaster position="bottom-right" />
     </div>

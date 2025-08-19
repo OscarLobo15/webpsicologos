@@ -2,6 +2,16 @@ const supabase = require('../utils/supabaseClient');
 
 exports.getDashboardInfo = async (req, res, next) => {
   const { psicologo_id } = req.params;
+  const userId = req.user.id;
+  
+  // Verificar que el usuario solo puede acceder a su propio dashboard
+  if (parseInt(psicologo_id) !== userId) {
+    return res.status(403).json({ 
+      success: false, 
+      message: 'No tienes permiso para acceder a este dashboard.' 
+    });
+  }
+  
   try {
     // Citas de la semana
     const { count: citasSemana } = await supabase

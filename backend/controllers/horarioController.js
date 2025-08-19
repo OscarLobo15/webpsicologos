@@ -40,6 +40,16 @@ const supabase = require('../utils/supabaseClient');
 
 exports.getHorarios = async (req, res, next) => {
   const { psicologo_id } = req.params;
+  const userId = req.user.id;
+  
+  // Verificar que el usuario solo puede ver sus propios horarios
+  if (parseInt(psicologo_id) !== userId) {
+    return res.status(403).json({ 
+      success: false, 
+      message: 'No tienes permiso para acceder a estos horarios.' 
+    });
+  }
+  
   try {
     // Traer todos los bloques de disponibilidad de este psicólogo
     const { data: bloques, error } = await supabase
@@ -167,52 +177,115 @@ exports.addHorario = async (req, res, next) => {
 exports.updateHorario = async (req, res, next) => {
   const { id } = req.params;
   const { fecha, hora, hora_fin } = req.body;
+  const userId = req.user.id;
+  
   if (!fecha || !hora || !hora_fin) {
     return res.status(400).json({ success: false, message: "Faltan datos obligatorios (fecha, hora, hora_fin)" });
   }
+  
   const fechaRegex = /^\d{4}-\d{2}-\d{2}$/;
   const horaRegex = /^\d{2}:\d{2}$/;
   if (!fechaRegex.test(fecha) || !horaRegex.test(hora) || !horaRegex.test(hora_fin)) {
     return res.status(400).json({ success: false, message: "Formato de fecha u hora inválido" });
   }
+  
   if (hora >= hora_fin) {
     return res.status(400).json({ success: false, message: "La hora de fin debe ser posterior a la de inicio" });
   }
+  
   try {
+    // Primero, verificar que el bloque pertenece al psicólogo autenticado
+    const { data: bloque, error: errorBloque } = await supabase
+      .from('horarios_disponibles')
+      .select('psicologo_id')
+      .eq('id', id)
+      .single();
+      
+    if (errorBloque) throw errorBloque;
+    
+    // Si no existe el bloque o no le pertenece al usuario actual
+    if (!bloque || bloque.psicologo_id !== userId) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'No tienes permiso para modificar este bloque o el bloque no existe.' 
+      });
+    }
+    
+    // Verificar si hay una reserva asociada al bloque
+    const { data: reservas, error: errorReserva } = await supabase
+      .from('reservas')
+      .select('id')
+      .eq('horario_id', id)
+      .limit(1);
+    if (errorReserva) throw errorReserva;
+    
+    if (reservas && reservas.length > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No se puede modificar: el bloque ya está reservado.' 
+      });
+    }
+    
     // Validar que no se superponga con otro bloque del mismo psicólogo (excepto el actual)
     const { data: actuales, error: errorExist } = await supabase
       .from('horarios_disponibles')
       .select('id, fecha, hora, hora_fin, psicologo_id')
       .eq('fecha', fecha);
     if (errorExist) throw errorExist;
+    
     // Convertir horas a minutos para comparar correctamente
     function horaATotalMinutos(h) {
       const [hh, mm] = h.split(":").map(Number);
       return hh * 60 + mm;
     }
+    
     const nuevoInicio = horaATotalMinutos(hora);
     const nuevoFin = horaATotalMinutos(hora_fin);
+    
     const solapado = (actuales || []).some(b => {
-      if (b.id == id || b.psicologo_id != req.user.id) return false;
+      if (b.id == id || b.psicologo_id != userId) return false;
       const bInicio = horaATotalMinutos(b.hora);
       const bFin = horaATotalMinutos(b.hora_fin);
       return (nuevoInicio < bFin && nuevoFin > bInicio);
     });
+    
     if (solapado) {
       return res.status(400).json({ success: false, message: 'El bloque se superpone con otro existente.' });
     }
+    
     const { error } = await supabase
       .from('horarios_disponibles')
       .update({ fecha, hora, hora_fin })
       .eq('id', id);
+      
     if (error) throw error;
+    
     res.json({ success: true });
   } catch (err) { next(err); }
 };
 
 exports.deleteHorario = async (req, res, next) => {
   const { id } = req.params;
+  const userId = req.user.id;
+  
   try {
+    // Primero, verificar que el bloque pertenece al psicólogo autenticado
+    const { data: bloque, error: errorBloque } = await supabase
+      .from('horarios_disponibles')
+      .select('psicologo_id')
+      .eq('id', id)
+      .single();
+      
+    if (errorBloque) throw errorBloque;
+    
+    // Si no existe el bloque o no le pertenece al usuario actual
+    if (!bloque || bloque.psicologo_id !== userId) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'No tienes permiso para eliminar este bloque o el bloque no existe.' 
+      });
+    }
+    
     // Buscar si existe una reserva asociada a este bloque
     const { data: reservas, error: errorReserva } = await supabase
       .from('reservas')

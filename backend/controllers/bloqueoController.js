@@ -3,6 +3,8 @@ const supabase = require('../utils/supabaseClient');
 // Bloquear un horario disponible (cambia disponible = false)
 exports.bloquearHorario = async (req, res, next) => {
   const { id } = req.params;
+  const userId = req.user.id;
+  
   try {
     // Verificar que el bloque existe y está disponible
     const { data: bloque, error: errorBloque } = await supabase
@@ -17,6 +19,14 @@ exports.bloquearHorario = async (req, res, next) => {
     
     if (!bloque) {
       return res.status(404).json({ success: false, message: 'Bloque no encontrado' });
+    }
+    
+    // Verificar que el bloque pertenece al psicólogo autenticado
+    if (bloque.psicologo_id !== userId) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'No tienes permiso para modificar este bloque.' 
+      });
     }
     
     // Verificar que no tiene reservas
@@ -53,6 +63,8 @@ exports.bloquearHorario = async (req, res, next) => {
 // Desbloquear un horario bloqueado (cambia disponible = true)
 exports.desbloquearHorario = async (req, res, next) => {
   const { id } = req.params;
+  const userId = req.user.id;
+  
   try {
     // Verificar que el bloque existe
     const { data: bloque, error: errorBloque } = await supabase
@@ -67,6 +79,14 @@ exports.desbloquearHorario = async (req, res, next) => {
     
     if (!bloque) {
       return res.status(404).json({ success: false, message: 'Bloque no encontrado' });
+    }
+    
+    // Verificar que el bloque pertenece al psicólogo autenticado
+    if (bloque.psicologo_id !== userId) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'No tienes permiso para modificar este bloque.' 
+      });
     }
     
     // Actualizar el estado del bloque (solo disponible = true)
