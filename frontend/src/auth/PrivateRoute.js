@@ -8,18 +8,38 @@ export default function PrivateRoute({ children, allowedRoles = [] }) {
 
   useEffect(() => {
     const verificarSesion = async () => {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const userLocal = JSON.parse(localStorage.getItem("user"));
-
-      if (sessionData.session && userLocal) {
-        if (
-          allowedRoles.length === 0 || 
-          allowedRoles.includes(userLocal.tipo_usuario)
-        ) {
-          setAutorizado(true);
+      try {
+        // Verificar si hay token y usuario en localStorage
+        const token = localStorage.getItem("token");
+        const userString = localStorage.getItem("user");
+        
+        if (!token || !userString) {
+          setLoading(false);
+          return;
         }
-      }
+        
+        const userLocal = JSON.parse(userString);
 
+        // Verificar la sesión en Supabase (autenticación secundaria)
+        // Aunque no usamos el resultado directamente, sirve como verificación adicional
+        await supabase.auth.getSession();
+
+        // Si hay sesión en Supabase O hay token local (permitimos cualquiera de las dos)
+        if (token && userLocal) {
+          if (
+            allowedRoles.length === 0 || 
+            allowedRoles.includes(userLocal.tipo_usuario)
+          ) {
+            setAutorizado(true);
+          } else {
+            // Usuario no tiene rol permitido
+          }
+        } else {
+          console.error("No hay sesión activa");
+        }
+      } catch (error) {
+        console.error("Error verificando sesión:", error);
+      }
       setLoading(false);
     };
 

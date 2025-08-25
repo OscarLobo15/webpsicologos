@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 require('dotenv').config();
 
 // Importar rutas
@@ -18,6 +19,9 @@ const errorHandler = require('./middlewares/errorMiddleware');
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Servir archivos estáticos de la carpeta uploads
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Rutas base
 app.use('/api/auth', authRoutes);

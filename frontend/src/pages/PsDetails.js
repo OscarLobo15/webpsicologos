@@ -16,8 +16,77 @@ export default function PsDetailsModern() {
       try {
         const resp = await fetch(`http://localhost:5000/api/psychologists/${id}`);
         const data = await resp.json();
-        if (data.success) setPsicologo(data.psicologo);
-        else setPsicologo(null);
+        if (data.success) {
+          // Procesar los datos para asegurar que los arrays sean consistentes
+          const psicologoData = {
+            ...data.psicologo,
+            
+            // Asegurar que áreas sea un array
+            areas: (() => {
+              if (data.psicologo.areas_atencion || data.psicologo.areas) {
+                const areasData = data.psicologo.areas_atencion || data.psicologo.areas;
+                if (Array.isArray(areasData)) {
+                  return [...areasData];
+                }
+                if (typeof areasData === 'string') {
+                  return areasData.split(',').map(item => item.trim()).filter(Boolean);
+                }
+              }
+              return [];
+            })(),
+            
+            // Asegurar que formación sea un array
+            formacion: (() => {
+              if (data.psicologo.formacion_academica || data.psicologo.formacion) {
+                const formacionData = data.psicologo.formacion_academica || data.psicologo.formacion;
+                if (Array.isArray(formacionData)) {
+                  return [...formacionData];
+                }
+                if (typeof formacionData === 'string') {
+                  return formacionData.split(',').map(item => item.trim()).filter(Boolean);
+                }
+              }
+              return [];
+            })(),
+            
+            // Asegurar que idiomas sea un array
+            idiomas: (() => {
+              if (data.psicologo.idiomas) {
+                if (Array.isArray(data.psicologo.idiomas)) {
+                  return [...data.psicologo.idiomas];
+                }
+                if (typeof data.psicologo.idiomas === 'string') {
+                  return data.psicologo.idiomas.split(',').map(item => item.trim()).filter(Boolean);
+                }
+              }
+              return [];
+            })(),
+            // Asegurar que modalidad_atencion sea un array
+            modalidad_atencion: (() => {
+              if (data.psicologo.modalidad_atencion) {
+                if (Array.isArray(data.psicologo.modalidad_atencion)) {
+                  return [...data.psicologo.modalidad_atencion];
+                }
+                if (typeof data.psicologo.modalidad_atencion === 'string') {
+                  // Puede venir como string tipo 'Online,Presencial' o '["Online","Presencial"]'
+                  try {
+                    // Intenta parsear como JSON array
+                    const parsed = JSON.parse(data.psicologo.modalidad_atencion);
+                    if (Array.isArray(parsed)) return parsed.map(item => String(item).trim());
+                  } catch {
+                    // Si falla, parsea como string separada por coma
+                    return data.psicologo.modalidad_atencion.split(',').map(item => item.replace(/\[|\]|"/g, '').trim()).filter(Boolean);
+                  }
+                }
+              }
+              return [];
+            })()
+          };
+          
+          setPsicologo(psicologoData);
+        } else {
+          setPsicologo(null);
+        }
       } catch {
         setPsicologo(null);
       }
@@ -29,9 +98,13 @@ export default function PsDetailsModern() {
         const resp = await fetch(`http://localhost:5000/api/horarios/${id}/disponibles`);
         const data = await resp.json();
         if (data.success && Array.isArray(data.bloques)) {
-          const disponibles = data.bloques;
+          const ahora = new Date();
+          const cuatroHorasDespues = new Date(ahora.getTime() + 4 * 60 * 60 * 1000);
+          const disponibles = data.bloques
+            .map(b => ({ ...b, fechaHora: new Date(`${b.fecha}T${b.hora}`) }))
+            .filter(b => b.fechaHora > cuatroHorasDespues)
+            .sort((a, b) => a.fechaHora - b.fechaHora);
           if (disponibles.length > 0) {
-            disponibles.sort((a, b) => new Date(`${a.fecha}T${a.hora}`) - new Date(`${b.fecha}T${b.hora}`));
             setProximaHora(disponibles[0]);
           } else {
             setProximaHora(null);
@@ -113,9 +186,14 @@ export default function PsDetailsModern() {
             <div className="bg-blue-50 p-6 rounded-2xl shadow border border-blue-100">
               <h3 className="text-xl font-bold text-blue-700 mb-3">Áreas de atención</h3>
               <div className="flex flex-wrap gap-2">
-                {(psicologo.areas || ["Sin información"]).map((area, i) => (
-                  <span key={i} className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm">{area}</span>
-                ))}
+                {(Array.isArray(psicologo.areas) && psicologo.areas.length > 0) ?
+                  psicologo.areas.map((area, i) => (
+                    <span key={i} className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm">
+                      {typeof area === 'string' ? area.replace(/["\[\]\n\r]/g, '').trim() : area}
+                    </span>
+                  )) :
+                  <span className="text-gray-600">Sin información</span>
+                }
               </div>
             </div>
 
@@ -127,7 +205,12 @@ export default function PsDetailsModern() {
             <div className="bg-blue-50 p-6 rounded-2xl shadow border border-blue-100">
               <h3 className="text-xl font-bold text-blue-700 mb-3">Formación Académica</h3>
               <ul className="list-disc list-inside text-gray-700">
-                {(psicologo.formacion || ["Sin información"]).map((f, i) => (<li key={i}>{f}</li>))}
+                {(Array.isArray(psicologo.formacion) && psicologo.formacion.length > 0) ?
+                  psicologo.formacion.map((f, i) => (
+                    <li key={i}>{typeof f === 'string' ? f.replace(/["\[\]\n\r]/g, '').trim() : f}</li>
+                  )) :
+                  <li className="text-gray-600">Sin información</li>
+                }
               </ul>
             </div>
 
@@ -140,11 +223,31 @@ export default function PsDetailsModern() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
             <div className="bg-blue-50 p-6 rounded-2xl shadow border border-blue-100">
               <h3 className="text-xl font-bold text-blue-700 mb-3">Idiomas</h3>
-              <p className="text-gray-700">{psicologo.idiomas || 'Sin información disponible'}</p>
+              <ul className="list-disc list-inside text-gray-700">
+                {(Array.isArray(psicologo.idiomas) && psicologo.idiomas.length > 0) ?
+                  psicologo.idiomas.map((idioma, i) => (
+                    <li key={i}>{typeof idioma === 'string' ? idioma.replace(/["\[\]\n\r]/g, '').trim() : idioma}</li>
+                  )) :
+                  <li className="text-gray-600">Sin información</li>
+                }
+              </ul>
             </div>
             <div className="bg-blue-50 p-6 rounded-2xl shadow border border-blue-100">
               <h3 className="text-xl font-bold text-blue-700 mb-3">Tarifas y Pago</h3>
               <p className="text-gray-700">{psicologo.tarifas || 'Sin información disponible'}</p>
+            </div>
+            <div className="bg-blue-50 p-6 rounded-2xl shadow border border-blue-100">
+              <h3 className="text-xl font-bold text-blue-700 mb-3">Modalidades</h3>
+              <div className="flex flex-wrap gap-2">
+                {(Array.isArray(psicologo.modalidad_atencion) && psicologo.modalidad_atencion.length > 0) ?
+                  psicologo.modalidad_atencion.map((mod, i) => (
+                    <span key={i} className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm">
+                      {typeof mod === 'string' ? mod.replace(/["\[\]\n\r]/g, '').trim() : mod}
+                    </span>
+                  )) :
+                  <span className="text-gray-600">Sin información disponible</span>
+                }
+              </div>
             </div>
           </div>
 

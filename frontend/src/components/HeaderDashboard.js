@@ -1,5 +1,5 @@
 // src/Components/HeaderDashboard.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { LogOut, User } from "lucide-react";
 import { supabase } from "../utils/supabaseClient";
@@ -9,11 +9,11 @@ export default function HeaderDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const cerrarSesion = async () => {
+  const cerrarSesion = useCallback(async () => {
     await supabase.auth.signOut();
     localStorage.removeItem("user");
     navigate("/psicoconecta");
-  };
+  }, [navigate]);
 
   // Auto logout tras 5 min de inactividad
   useEffect(() => {
@@ -35,10 +35,10 @@ export default function HeaderDashboard() {
       window.removeEventListener("keydown", resetTimer);
       window.removeEventListener("scroll", resetTimer);
     };
-  }, []);
+  }, [cerrarSesion]);
 
   return (
-    <header className="fixed top-0 left-0 w-full bg-white shadow-md px-6 py-4 flex justify-between items-center z-50">
+    <header className="fixed top-0 left-0 w-full bg-white shadow-md px-6 py-6 flex justify-between items-center z-50">
       <h1
         className="text-xl font-bold text-blue-700 cursor-pointer"
         onClick={() => navigate("/dashboard-psicologo")}
@@ -47,12 +47,12 @@ export default function HeaderDashboard() {
       </h1>
       <div className="flex items-center gap-4">
         <span className="text-blue-800 font-semibold hidden sm:inline">
-          {"Bienvenido, " + (user?.user_metadata?.full_name || user?.user_metadata?.nombre || user?.email || "Usuario")}
+          {"Bienvenido, " + (user?.user_metadata?.full_name || user?.user_metadata?.nombre || user?.email || "")}
         </span>
         <button
-          onClick={() => navigate("/perfil")}
+          onClick={() => navigate("/mi-perfil")}
           className="hover:text-blue-700"
-          title="Perfil"
+          title="Mi Perfil"
         >
           <User className="w-6 h-6" />
         </button>

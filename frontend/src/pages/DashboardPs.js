@@ -51,16 +51,6 @@ export default function DashboardPs() {
     const isBloqueado = event.extendedProps.bloqueado;
     const tipo = event.extendedProps.tipo || (isDisponible ? 'disponible' : isBloqueado ? 'bloqueado' : 'reservado');
     
-    // Log para depuración
-    console.log(`[DEBUG] Renderizando evento ID ${event.id}:`, {
-      title: event.title,
-      disponible: isDisponible,
-      bloqueado: isBloqueado,
-      tipo: tipo,
-      paciente: event.extendedProps.paciente,
-      modalidad: event.extendedProps.modalidad
-    });
-    
     // Colores según el tipo de evento
     let bgColor = 'bg-blue-500';
     let textColor = 'text-blue-900';
@@ -265,7 +255,7 @@ export default function DashboardPs() {
     <div className="min-h-screen bg-blue-50 pt-24 px-4 md:px-10">
       <HeaderDashboard nombre={user?.nombre} />
 
-      <h1 className="text-2xl md:text-3xl font-bold text-blue-900 mb-6">Mi Panel de Psicólogo</h1>
+      <h1 className="text-2xl md:text-3xl font-bold text-blue-900 mb-8">Mi Panel de Psicólogo</h1>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
         <CardInfo titulo="Sesiones semana" valor={resumen.citasSemana} />
@@ -713,7 +703,7 @@ export default function DashboardPs() {
             Nueva Reserva
           </button>
           <button
-            onClick={() => navigate('/profile')}
+            onClick={() => navigate('/editar-perfil')}
             className="bg-blue-600 text-white px-6 py-3 rounded-xl shadow-lg hover:bg-blue-700 transition-colors flex items-center"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">

@@ -25,7 +25,6 @@ exports.register = async (req, res, next) => {
       return res.status(409).json({ success: false, error: "El correo ya está registrado." });
     }
 
-
     // Crear usuario en Supabase Auth con display_name
     const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
       email,
@@ -42,34 +41,64 @@ exports.register = async (req, res, next) => {
     // Hashear password
     const hashedPassword = await bcrypt.hash(password, 10);
 
+
     // Insertar en usuarios
     const { data: inserted, error: insertError } = await supabase
       .from('usuarios')
       .insert([{ email, password: hashedPassword, tipo_usuario }])
       .select();
-    if (insertError) throw insertError;
+    if (insertError) {
+      // Si falla aquí, intentar limpiar el usuario en Auth
+      if (authUser && authUser.user && authUser.user.id) {
+        await supabase.auth.admin.deleteUser(authUser.user.id);
+      }
+      throw insertError;
+    }
 
     const usuario = inserted[0];
 
+    // Crear suscripción inicial sin plan para cualquier usuario
+    const fechaHoy = new Date().toISOString().slice(0, 10);
+    const { error: suscripcionError } = await supabase.from('suscripciones').insert([
+      {
+        usuario_id: usuario.id,
+        estado: 'sinplan',
+        fecha_inicio: fechaHoy
+      }
+    ]);
+    if (suscripcionError) {
+      // Si falla aquí, intentar limpiar usuario y registro en usuarios
+      await supabase.from('usuarios').delete().eq('id', usuario.id);
+      if (authUser && authUser.user && authUser.user.id) {
+        await supabase.auth.admin.deleteUser(authUser.user.id);
+      }
+      return res.status(500).json({ error: suscripcionError.message || 'Error al crear suscripción' });
+    }
+
     // Crear perfil según tipo de usuario
     if (tipo_usuario === 'psicologo') {
-      await supabase.from('perfiles_psicologos').insert([{
+      // Construir el objeto de perfil solo con los campos presentes
+      const perfilPsicologo = {
         usuario_id: usuario.id,
-        nombre, apellido, universidad, titulo,
-        foto_path, descripcion, ciudad, comuna
-      }]);
-      // Crear suscripción inicial sin plan
-      const fechaHoy = new Date().toISOString().slice(0, 10);
-      const { error: suscripcionError } = await supabase.from('suscripciones').insert([
-        {
-          usuario_id: usuario.id,
-          estado: 'sinplan',
-          fecha_inicio: fechaHoy
+        nombre,
+        apellido,
+        universidad,
+        ciudad,
+        comuna
+      };
+      if (typeof titulo !== 'undefined') perfilPsicologo.titulo = titulo;
+      if (typeof foto_path !== 'undefined') perfilPsicologo.foto_path = foto_path;
+      // Siempre enviar descripcion (string vacío si no viene)
+      perfilPsicologo.descripcion = typeof descripcion !== 'undefined' ? descripcion : "";
+
+      const { error: perfilError } = await supabase.from('perfiles_psicologos').insert([perfilPsicologo]);
+      if (perfilError) {
+        // Si falla aquí, intentar limpiar usuario y registro en usuarios
+        await supabase.from('usuarios').delete().eq('id', usuario.id);
+        if (authUser && authUser.user && authUser.user.id) {
+          await supabase.auth.admin.deleteUser(authUser.user.id);
         }
-      ]);
-      if (suscripcionError) {
-        console.error('Error al insertar en suscripciones:', suscripcionError);
-        return res.status(500).json({ error: suscripcionError.message || 'Error al crear suscripción' });
+        throw perfilError;
       }
     } else {
       await supabase.from('perfiles_clientes').insert([{ usuario_id: usuario.id, nombre, apellido }]);

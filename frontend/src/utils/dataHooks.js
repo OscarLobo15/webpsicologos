@@ -73,7 +73,9 @@ export const useDataLoader = (fetchFunction, cacheKey, options = {}) => {
     if (autoLoad) {
       loadData();
     }
-  }, [...dependencies, loadData]);
+    // No incluir loadData en dependencias para evitar ciclo infinito
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [...dependencies, autoLoad]);
   
   return { 
     data, 
